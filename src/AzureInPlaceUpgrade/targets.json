@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "notes": [
+    "Only source/target pairs that Microsoft documents as supported in-place upgrade paths for Azure VMs are listed.",
+    "verified=true means the path ran end to end in this project's lab. false means documented by Microsoft, not yet exercised here. Flip it only with a lab run in the pull request.",
+    "productKeys are Microsoft's public KMS client setup keys (GVLK) for the TARGET version. They are handed to setup.exe /pkey only when Setup cannot resolve the edition against the multi-edition install.wim (HRESULT 0xC1900215). They activate nothing.",
+    "architecture uses the Win32_OperatingSystem.OSArchitecture spelling because that is what the guest probe reports."
+  ],
+  "targets": {
+    "WS2025": {
+      "displayName": "Windows Server 2025",
+      "targetBuild": 26100,
+      "sources": [
+        { "build": 9600,  "name": "Windows Server 2012 R2", "engines": [ "MediaDisk" ],                  "verified": false },
+        { "build": 14393, "name": "Windows Server 2016",    "engines": [ "MediaDisk" ],                  "verified": false },
+        { "build": 17763, "name": "Windows Server 2019",    "engines": [ "MediaDisk", "FeatureUpdate" ], "verified": false },
+        { "build": 20348, "name": "Windows Server 2022",    "engines": [ "MediaDisk", "FeatureUpdate" ], "verified": false }
+      ],
+      "editions": [ "ServerStandard", "ServerDatacenter" ],
+      "installationTypes": [ "Server", "Server Core" ],
+      "language": "en-US",
+      "architecture": "64-bit",
+      "engines": {
+        "MediaDisk": {
+          "publisher": "MicrosoftWindowsServer",
+          "offer": "WindowsServerUpgrade",
+          "sku": "server2025Upgrade"
+        },
+        "FeatureUpdate": {
+          "status": "experimental",
+          "registryOptIn": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate\\AllowWindowsServerFeatureUpdate",
+          "requiredUpdates": { "17763": "KB5078752", "20348": "KB5078766" }
+        }
+      },
+      "productKeys": {
+        "ServerStandard": "TVRH6-WHNXV-R9WG3-9XRFY-MY832",
+        "ServerDatacenter": "D764K-2NDRG-47T6Q-P8T8W-YP6DF"
+      }
+    },
+    "WS2022": {
+      "displayName": "Windows Server 2022",
+      "targetBuild": 20348,
+      "sources": [
+        { "build": 14393, "name": "Windows Server 2016", "engines": [ "MediaDisk" ], "verified": false },
+        { "build": 17763, "name": "Windows Server 2019", "engines": [ "MediaDisk" ], "verified": false }
+      ],
+      "editions": [ "ServerStandard", "ServerDatacenter" ],
+      "installationTypes": [ "Server", "Server Core" ],
+      "language": "en-US",
+      "architecture": "64-bit",
+      "engines": {
+        "MediaDisk": {
+          "publisher": "MicrosoftWindowsServer",
+          "offer": "WindowsServerUpgrade",
+          "sku": "server2022Upgrade"
+        }
+      },
+      "productKeys": {
+        "ServerStandard": "VDYBN-27WPP-V4HQT-9VMD4-VMK7H",
+        "ServerDatacenter": "WX4NM-KYWYW-QJJR4-XV3QB-6VM33"
+      }
+    },
+    "WS2019": {
+      "displayName": "Windows Server 2019",
+      "targetBuild": 17763,
+      "sources": [
+        { "build": 9600,  "name": "Windows Server 2012 R2", "engines": [ "MediaDisk" ], "verified": false },
+        { "build": 14393, "name": "Windows Server 2016",    "engines": [ "MediaDisk" ], "verified": false }
+      ],
+      "editions": [ "ServerStandard", "ServerDatacenter" ],
+      "installationTypes": [ "Server", "Server Core" ],
+      "language": "en-US",
+      "architecture": "64-bit",
+      "engines": {
+        "MediaDisk": {
+          "publisher": "MicrosoftWindowsServer",
+          "offer": "WindowsServerUpgrade",
+          "sku": "server2019Upgrade"
+        }
+      },
+      "productKeys": {
+        "ServerStandard": "N69G4-B89J2-4G8F4-WWYCC-J464C",
+        "ServerDatacenter": "WMDGN-G9PQG-XVVXX-R3X43-63DFG"
+      }
+    }
+  }
+}

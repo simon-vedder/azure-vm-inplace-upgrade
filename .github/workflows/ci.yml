@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  powershell:
+    name: Analyze and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache PowerShell modules
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/powershell/Modules
+          key: psmodules-${{ runner.os }}-${{ hashFiles('src/AzureInPlaceUpgrade/AzureInPlaceUpgrade.psd1') }}
+
+      - name: Install PowerShell modules
+        shell: pwsh
+        run: |
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          foreach ($m in 'PSScriptAnalyzer', 'Pester') {
+            if (-not (Get-Module -ListAvailable $m)) { Install-Module $m -Force -Scope CurrentUser -SkipPublisherCheck }
+          }
+          # The module manifest declares Az.* as RequiredModules; Import-Module needs them present.
+          foreach ($m in 'Az.Accounts', 'Az.Compute', 'Az.Resources') {
+            if (-not (Get-Module -ListAvailable $m)) { Install-Module $m -Force -Scope CurrentUser }
+          }
+
+      - name: Validate manifest
+        shell: pwsh
+        run: Test-ModuleManifest ./src/AzureInPlaceUpgrade/AzureInPlaceUpgrade.psd1 | Format-List Name, Version, PowerShellVersion
+
+      - name: Analyze
+        shell: pwsh
+        run: |
+          $results = Invoke-ScriptAnalyzer -Path ./src -Recurse -Settings ./PSScriptAnalyzerSettings.psd1
+          if ($results) {
+            $results | Format-Table -AutoSize Severity, ScriptName, Line, RuleName, Message
+            throw "PSScriptAnalyzer found $($results.Count) issue(s)."
+          }
+          Write-Host 'Clean.'
+
+      - name: Test
+        shell: pwsh
+        run: |
+          $config = New-PesterConfiguration
+          $config.Run.Path = './tests'
+          $config.Output.Verbosity = 'Detailed'
+          $config.TestResult.Enabled = $true
+          $config.TestResult.OutputPath = 'TestResults.xml'
+          $config.Run.Exit = $true
+          Invoke-Pester -Configuration $config
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: TestResults.xml
