@@ -1,5 +1,7 @@
 # azure-vm-inplace-upgrade
 
+[![CI](https://github.com/simon-vedder/azure-vm-inplace-upgrade/actions/workflows/ci.yml/badge.svg)](https://github.com/simon-vedder/azure-vm-inplace-upgrade/actions/workflows/ci.yml)
+[![PowerShell Gallery](https://img.shields.io/powershellgallery/v/AzureInPlaceUpgrade?include_prereleases&label=PowerShell%20Gallery)](https://www.powershellgallery.com/packages/AzureInPlaceUpgrade)
 ![PowerShell](https://img.shields.io/badge/PowerShell-7.2%2B-5391FE?logo=powershell&logoColor=white)
 ![Azure Automation](https://img.shields.io/badge/Azure-Automation-0078D4?logo=microsoftazure&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
@@ -70,7 +72,7 @@ image forever; the guest does not lie.
 ## Quick start
 
 ```powershell
-Import-Module ./src/AzureInPlaceUpgrade      # Install-Module AzureInPlaceUpgrade once it is on the Gallery
+Install-Module AzureInPlaceUpgrade -AllowPrerelease   # or Import-Module ./src/AzureInPlaceUpgrade from a clone
 Connect-AzAccount
 Set-AzContext -Subscription '<subscription name>'
 
@@ -115,6 +117,12 @@ architecture, language, free space, pending reboot, domain controller, cluster s
 Setup, activation channel, and whether the upgrade media image exists in the VM's region.
 
 ## Azure Automation
+
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fsimon-vedder%2Fazure-vm-inplace-upgrade%2Fmain%2Fdeploy%2Fazuredeploy.json)
+
+The button deploys `deploy/main.bicep` (compiled to `deploy/azuredeploy.json`) at subscription
+scope: set `moduleVersion` to a released version and, if the VMs live in one resource group,
+`targetResourceGroupName`. Nothing starts until you tag a VM `UpgradeState=Pending`.
 
 `src/runbooks/Invoke-InPlaceUpgradeRunbook.ps1` is the thin wrapper: sign in with the managed
 identity, discover by tag, apply `-Ring` and `-MaxParallel`, call the module per VM. Two
@@ -279,7 +287,7 @@ tests/                       Pester
 4. ✅ Runbook wrapper, `Start` / `Check` modes.
 5. ✅ Bicep: Automation Account, custom role, module import, schedules; deployed and driven end to end in the lab.
 6. ✅ FeatureUpdate engine: spike, then one end-to-end run through the module and the scheduled Check jobs.
-7. ✅ Log Analytics table + workbook; six records for one upgrade verified end to end. Deploy-to-Azure button pending.
+7. ✅ Log Analytics table + workbook; six records for one upgrade verified end to end. Deploy-to-Azure button.
 8. Lab: 2012 R2 → 2025, the 2022 and 2019 targets, Trusted Launch.
 9. PowerShell Gallery release.
 

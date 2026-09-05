@@ -1,0 +1,860 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.44.1.10279",
+      "templateHash": "4152785601617817256"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "westeurope",
+      "metadata": {
+        "description": "Region for the resource group and everything in it."
+      }
+    },
+    "resourceGroupName": {
+      "type": "string",
+      "defaultValue": "rg-inplaceupgrade-weu"
+    },
+    "automationAccountName": {
+      "type": "string",
+      "defaultValue": "aa-inplaceupgrade-weu"
+    },
+    "logAnalyticsWorkspaceName": {
+      "type": "string",
+      "defaultValue": "log-inplaceupgrade-weu"
+    },
+    "logRetentionDays": {
+      "type": "int",
+      "defaultValue": 90,
+      "minValue": 30,
+      "maxValue": 730
+    },
+    "moduleVersion": {
+      "type": "string",
+      "metadata": {
+        "description": "AzureInPlaceUpgrade module version on the PowerShell Gallery."
+      }
+    },
+    "contentVersion": {
+      "type": "string",
+      "defaultValue": "",
+      "minLength": 0,
+      "metadata": {
+        "description": "Version stamp written to the module and runbook content links, System.Version form (up to four numeric parts, e.g. 0.2.0.1). Defaults to moduleVersion; bump it to force Automation to re-import unchanged URIs."
+      }
+    },
+    "modulePackageUri": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Override the module package source, for example a GitHub release asset before the first Gallery release. Empty means the Gallery URL for moduleVersion."
+      }
+    },
+    "runbookContentUri": {
+      "type": "string",
+      "defaultValue": "https://raw.githubusercontent.com/simon-vedder/azure-vm-inplace-upgrade/main/src/runbooks/Invoke-InPlaceUpgradeRunbook.ps1",
+      "metadata": {
+        "description": "Raw URL of the runbook wrapper. Pin to a tag in production."
+      }
+    },
+    "targetResourceGroupName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Resource group the identity gets the operator role on. Empty assigns the role at subscription scope."
+      }
+    },
+    "ring": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Only VMs with this UpgradeRing tag are processed by the schedules. Empty means any ring."
+      }
+    },
+    "maxParallel": {
+      "type": "int",
+      "defaultValue": 3,
+      "minValue": 1,
+      "maxValue": 50
+    },
+    "timeoutMinutes": {
+      "type": "int",
+      "defaultValue": 240,
+      "minValue": 30,
+      "maxValue": 1440
+    },
+    "checkIntervalMinutes": {
+      "type": "int",
+      "defaultValue": 20,
+      "minValue": 15,
+      "maxValue": 60
+    },
+    "scheduleStartTime": {
+      "type": "string",
+      "defaultValue": "[dateTimeAdd(parameters('baseTime'), 'PT1H')]",
+      "metadata": {
+        "description": "First run of both schedules, ISO 8601. Must be at least five minutes in the future; defaults to one hour from deployment."
+      }
+    },
+    "scheduleTimeZone": {
+      "type": "string",
+      "defaultValue": "Etc/UTC"
+    },
+    "startScheduleEnabled": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Enable the daily Start schedule at deployment. Off by default; enable it when the first ring is approved."
+      }
+    },
+    "roleName": {
+      "type": "string",
+      "defaultValue": "Azure VM In-Place Upgrade Operator"
+    },
+    "tags": {
+      "type": "object",
+      "defaultValue": {
+        "Project": "azure-vm-inplace-upgrade"
+      }
+    },
+    "baseTime": {
+      "type": "string",
+      "defaultValue": "[utcNow()]"
+    }
+  },
+  "variables": {
+    "effectiveModuleUri": "[if(empty(parameters('modulePackageUri')), format('https://www.powershellgallery.com/api/v2/package/AzureInPlaceUpgrade/{0}', parameters('moduleVersion')), parameters('modulePackageUri'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/resourceGroups",
+      "apiVersion": "2024-03-01",
+      "name": "[parameters('resourceGroupName')]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('tags')]"
+    },
+    {
+      "type": "Microsoft.Authorization/roleDefinitions",
+      "apiVersion": "2022-04-01",
+      "name": "[guid(subscription().id, parameters('roleName'))]",
+      "properties": {
+        "roleName": "[parameters('roleName')]",
+        "description": "Preflight, snapshot, media disk, Run Command and tag writes for tag-driven in-place upgrades of Windows Server VMs.",
+        "type": "CustomRole",
+        "assignableScopes": [
+          "[subscription().id]"
+        ],
+        "permissions": [
+          {
+            "actions": [
+              "Microsoft.Compute/virtualMachines/read",
+              "Microsoft.Compute/virtualMachines/write",
+              "Microsoft.Compute/virtualMachines/instanceView/read",
+              "Microsoft.Compute/virtualMachines/runCommand/action",
+              "Microsoft.Compute/disks/read",
+              "Microsoft.Compute/disks/write",
+              "Microsoft.Compute/disks/delete",
+              "Microsoft.Compute/snapshots/read",
+              "Microsoft.Compute/snapshots/write",
+              "Microsoft.Compute/locations/publishers/read",
+              "Microsoft.Compute/locations/publishers/artifacttypes/offers/read",
+              "Microsoft.Compute/locations/publishers/artifacttypes/offers/skus/read",
+              "Microsoft.Compute/locations/publishers/artifacttypes/offers/skus/versions/read",
+              "Microsoft.Network/networkInterfaces/join/action",
+              "Microsoft.Resources/tags/write",
+              "Microsoft.Resources/subscriptions/read",
+              "Microsoft.Resources/subscriptions/resourceGroups/read"
+            ],
+            "notActions": [],
+            "dataActions": [],
+            "notDataActions": []
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "automation",
+      "resourceGroup": "[parameters('resourceGroupName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "automationAccountName": {
+            "value": "[parameters('automationAccountName')]"
+          },
+          "logAnalyticsWorkspaceName": {
+            "value": "[parameters('logAnalyticsWorkspaceName')]"
+          },
+          "logRetentionDays": {
+            "value": "[parameters('logRetentionDays')]"
+          },
+          "tags": {
+            "value": "[parameters('tags')]"
+          },
+          "modulePackageUri": {
+            "value": "[variables('effectiveModuleUri')]"
+          },
+          "runbookContentUri": {
+            "value": "[parameters('runbookContentUri')]"
+          },
+          "contentVersion": "[if(empty(parameters('contentVersion')), createObject('value', parameters('moduleVersion')), createObject('value', parameters('contentVersion')))]",
+          "subscriptionIdForJobs": {
+            "value": "[subscription().subscriptionId]"
+          },
+          "ring": {
+            "value": "[parameters('ring')]"
+          },
+          "maxParallel": {
+            "value": "[parameters('maxParallel')]"
+          },
+          "timeoutMinutes": {
+            "value": "[parameters('timeoutMinutes')]"
+          },
+          "checkIntervalMinutes": {
+            "value": "[parameters('checkIntervalMinutes')]"
+          },
+          "startScheduleTime": {
+            "value": "[parameters('scheduleStartTime')]"
+          },
+          "startScheduleEnabled": {
+            "value": "[parameters('startScheduleEnabled')]"
+          },
+          "scheduleTimeZone": {
+            "value": "[parameters('scheduleTimeZone')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.44.1.10279",
+              "templateHash": "3323459088047032267"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string"
+            },
+            "automationAccountName": {
+              "type": "string"
+            },
+            "logAnalyticsWorkspaceName": {
+              "type": "string"
+            },
+            "logRetentionDays": {
+              "type": "int"
+            },
+            "tags": {
+              "type": "object"
+            },
+            "modulePackageUri": {
+              "type": "string",
+              "metadata": {
+                "description": "Where the AzureInPlaceUpgrade module package comes from. PowerShell Gallery URL by default, or a GitHub release asset before the first Gallery release."
+              }
+            },
+            "runbookContentUri": {
+              "type": "string",
+              "metadata": {
+                "description": "Raw URL of the runbook script. Pinned to a tag or commit in production."
+              }
+            },
+            "contentVersion": {
+              "type": "string",
+              "metadata": {
+                "description": "Version stamp for the module package and runbook content. Change it to force a re-import."
+              }
+            },
+            "subscriptionIdForJobs": {
+              "type": "string"
+            },
+            "ring": {
+              "type": "string"
+            },
+            "maxParallel": {
+              "type": "int"
+            },
+            "timeoutMinutes": {
+              "type": "int"
+            },
+            "checkIntervalMinutes": {
+              "type": "int"
+            },
+            "startScheduleTime": {
+              "type": "string"
+            },
+            "startScheduleEnabled": {
+              "type": "bool"
+            },
+            "scheduleTimeZone": {
+              "type": "string"
+            }
+          },
+          "variables": {
+            "$fxv#0": "{\n  \"version\": \"Notebook/1.0\",\n  \"items\": [\n    {\n      \"type\": 1,\n      \"content\": {\n        \"json\": \"## In-place upgrades\\nOne record per state transition, written by the `AzureInPlaceUpgrade` module through the Logs Ingestion API. The **State** is what the `UpgradeState` tag says; the **Result** is what the job decided.\"\n      },\n      \"name\": \"title\"\n    },\n    {\n      \"type\": 3,\n      \"content\": {\n        \"version\": \"KqlItem/1.0\",\n        \"query\": \"InPlaceUpgrade_CL\\n| summarize arg_max(TimeGenerated, *) by VMName\\n| summarize VMs = count() by State\\n| order by State asc\",\n        \"size\": 4,\n        \"title\": \"VMs by current state\",\n        \"timeContext\": { \"durationMs\": 2592000000 },\n        \"queryType\": 0,\n        \"resourceType\": \"microsoft.operationalinsights/workspaces\",\n        \"crossComponentResources\": [ \"{workspaceId}\" ],\n        \"visualization\": \"tiles\",\n        \"tileSettings\": {\n          \"titleContent\": { \"columnMatch\": \"State\", \"formatter\": 1 },\n          \"leftContent\": { \"columnMatch\": \"VMs\", \"formatter\": 12, \"formatOptions\": { \"palette\": \"auto\" } },\n          \"showBorder\": true\n        }\n      },\n      \"name\": \"states\"\n    },\n    {\n      \"type\": 3,\n      \"content\": {\n        \"version\": \"KqlItem/1.0\",\n        \"query\": \"InPlaceUpgrade_CL\\n| summarize arg_max(TimeGenerated, *) by VMName\\n| project TimeGenerated, VMName, ResourceGroupName, Target, State, Result, SourceBuild, TargetBuild, Engine, ImageIndex, DurationMinutes, TaskResult, Snapshot\\n| order by TimeGenerated desc\",\n        \"size\": 0,\n        \"title\": \"Latest record per VM\",\n        \"timeContext\": { \"durationMs\": 2592000000 },\n        \"queryType\": 0,\n        \"resourceType\": \"microsoft.operationalinsights/workspaces\",\n        \"crossComponentResources\": [ \"{workspaceId}\" ],\n        \"gridSettings\": {\n          \"formatters\": [\n            { \"columnMatch\": \"State\", \"formatter\": 18, \"formatOptions\": { \"thresholdsOptions\": \"colors\", \"thresholdsGrid\": [ { \"operator\": \"==\", \"thresholdValue\": \"Completed\", \"representation\": \"green\", \"text\": \"{0}{1}\" }, { \"operator\": \"==\", \"thresholdValue\": \"Failed\", \"representation\": \"redBright\", \"text\": \"{0}{1}\" }, { \"operator\": \"==\", \"thresholdValue\": \"UpgradeStarted\", \"representation\": \"blue\", \"text\": \"{0}{1}\" }, { \"operator\": \"Default\", \"thresholdValue\": null, \"representation\": \"gray\", \"text\": \"{0}{1}\" } ] } }\n          ]\n        }\n      },\n      \"name\": \"latest\"\n    },\n    {\n      \"type\": 3,\n      \"content\": {\n        \"version\": \"KqlItem/1.0\",\n        \"query\": \"InPlaceUpgrade_CL\\n| where Result == 'Failed' or Result == 'NotEligible'\\n| project TimeGenerated, VMName, Result, Mode, TaskResult, Reason\\n| order by TimeGenerated desc\",\n        \"size\": 0,\n        \"title\": \"Failures and refused preflights\",\n        \"timeContext\": { \"durationMs\": 2592000000 },\n        \"queryType\": 0,\n        \"resourceType\": \"microsoft.operationalinsights/workspaces\",\n        \"crossComponentResources\": [ \"{workspaceId}\" ]\n      },\n      \"name\": \"failures\"\n    },\n    {\n      \"type\": 3,\n      \"content\": {\n        \"version\": \"KqlItem/1.0\",\n        \"query\": \"InPlaceUpgrade_CL\\n| where Result == 'Completed'\\n| project TimeGenerated, VMName, SourceBuild, TargetBuild, DurationMinutes\\n| order by TimeGenerated desc\",\n        \"size\": 0,\n        \"title\": \"Completed upgrades and how long Setup took\",\n        \"timeContext\": { \"durationMs\": 2592000000 },\n        \"queryType\": 0,\n        \"resourceType\": \"microsoft.operationalinsights/workspaces\",\n        \"crossComponentResources\": [ \"{workspaceId}\" ],\n        \"visualization\": \"table\"\n      },\n      \"name\": \"durations\"\n    },\n    {\n      \"type\": 3,\n      \"content\": {\n        \"version\": \"KqlItem/1.0\",\n        \"query\": \"InPlaceUpgrade_CL\\n| summarize Records = count() by bin(TimeGenerated, 15m), Result\\n| order by TimeGenerated asc\",\n        \"size\": 0,\n        \"title\": \"Activity over time\",\n        \"timeContext\": { \"durationMs\": 2592000000 },\n        \"queryType\": 0,\n        \"resourceType\": \"microsoft.operationalinsights/workspaces\",\n        \"crossComponentResources\": [ \"{workspaceId}\" ],\n        \"visualization\": \"barchart\"\n      },\n      \"name\": \"timeline\"\n    }\n  ],\n  \"fallbackResourceIds\": [ \"{workspaceId}\" ],\n  \"$schema\": \"https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json\"\n}\n",
+            "recordColumns": [
+              {
+                "name": "TimeGenerated",
+                "type": "datetime"
+              },
+              {
+                "name": "VMName",
+                "type": "string"
+              },
+              {
+                "name": "ResourceGroupName",
+                "type": "string"
+              },
+              {
+                "name": "Target",
+                "type": "string"
+              },
+              {
+                "name": "State",
+                "type": "string"
+              },
+              {
+                "name": "Result",
+                "type": "string"
+              },
+              {
+                "name": "Reason",
+                "type": "string"
+              },
+              {
+                "name": "Engine",
+                "type": "string"
+              },
+              {
+                "name": "SourceBuild",
+                "type": "int"
+              },
+              {
+                "name": "TargetBuild",
+                "type": "int"
+              },
+              {
+                "name": "ImageIndex",
+                "type": "int"
+              },
+              {
+                "name": "DurationMinutes",
+                "type": "int"
+              },
+              {
+                "name": "TaskResult",
+                "type": "string"
+              },
+              {
+                "name": "Snapshot",
+                "type": "string"
+              },
+              {
+                "name": "MediaDisk",
+                "type": "string"
+              },
+              {
+                "name": "Mode",
+                "type": "string"
+              },
+              {
+                "name": "JobId",
+                "type": "string"
+              },
+              {
+                "name": "ModuleVersion",
+                "type": "string"
+              },
+              {
+                "name": "LogExcerpt",
+                "type": "string"
+              }
+            ]
+          },
+          "resources": [
+            {
+              "type": "Microsoft.OperationalInsights/workspaces",
+              "apiVersion": "2023-09-01",
+              "name": "[parameters('logAnalyticsWorkspaceName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "sku": {
+                  "name": "PerGB2018"
+                },
+                "retentionInDays": "[parameters('logRetentionDays')]",
+                "features": {
+                  "enableLogAccessUsingOnlyResourcePermissions": true
+                }
+              }
+            },
+            {
+              "type": "Microsoft.OperationalInsights/workspaces/tables",
+              "apiVersion": "2023-09-01",
+              "name": "[format('{0}/{1}', parameters('logAnalyticsWorkspaceName'), 'InPlaceUpgrade_CL')]",
+              "properties": {
+                "plan": "Analytics",
+                "retentionInDays": "[parameters('logRetentionDays')]",
+                "schema": {
+                  "name": "InPlaceUpgrade_CL",
+                  "columns": "[variables('recordColumns')]"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Insights/dataCollectionEndpoints",
+              "apiVersion": "2023-03-11",
+              "name": "[format('dce-{0}', parameters('automationAccountName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "networkAcls": {
+                  "publicNetworkAccess": "Enabled"
+                }
+              }
+            },
+            {
+              "type": "Microsoft.Insights/dataCollectionRules",
+              "apiVersion": "2023-03-11",
+              "name": "[format('dcr-{0}', parameters('automationAccountName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "dataCollectionEndpointId": "[resourceId('Microsoft.Insights/dataCollectionEndpoints', format('dce-{0}', parameters('automationAccountName')))]",
+                "streamDeclarations": {
+                  "Custom-InPlaceUpgrade_CL": {
+                    "columns": "[variables('recordColumns')]"
+                  }
+                },
+                "destinations": {
+                  "logAnalytics": [
+                    {
+                      "name": "workspace",
+                      "workspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName'))]"
+                    }
+                  ]
+                },
+                "dataFlows": [
+                  {
+                    "streams": [
+                      "Custom-InPlaceUpgrade_CL"
+                    ],
+                    "destinations": [
+                      "workspace"
+                    ],
+                    "transformKql": "source",
+                    "outputStream": "Custom-InPlaceUpgrade_CL"
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Insights/dataCollectionEndpoints', format('dce-{0}', parameters('automationAccountName')))]",
+                "[resourceId('Microsoft.OperationalInsights/workspaces/tables', parameters('logAnalyticsWorkspaceName'), 'InPlaceUpgrade_CL')]",
+                "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Automation/automationAccounts",
+              "apiVersion": "2023-11-01",
+              "name": "[parameters('automationAccountName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "sku": {
+                  "name": "Basic"
+                },
+                "publicNetworkAccess": true,
+                "disableLocalAuth": true
+              }
+            },
+            {
+              "type": "Microsoft.Insights/diagnosticSettings",
+              "apiVersion": "2021-05-01-preview",
+              "scope": "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]",
+              "name": "to-log-analytics",
+              "properties": {
+                "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName'))]",
+                "logs": [
+                  {
+                    "category": "JobLogs",
+                    "enabled": true
+                  },
+                  {
+                    "category": "JobStreams",
+                    "enabled": true
+                  },
+                  {
+                    "category": "AuditEvent",
+                    "enabled": true
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]",
+                "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Automation/automationAccounts/powerShell72Modules",
+              "apiVersion": "2023-11-01",
+              "name": "[format('{0}/{1}', parameters('automationAccountName'), 'AzureInPlaceUpgrade')]",
+              "properties": {
+                "contentLink": {
+                  "uri": "[parameters('modulePackageUri')]",
+                  "version": "[parameters('contentVersion')]"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Automation/automationAccounts/variables",
+              "apiVersion": "2023-11-01",
+              "name": "[format('{0}/{1}', parameters('automationAccountName'), 'InPlaceUpgrade-LogIngestionEndpoint')]",
+              "properties": {
+                "isEncrypted": false,
+                "value": "[format('\"{0}\"', reference(resourceId('Microsoft.Insights/dataCollectionEndpoints', format('dce-{0}', parameters('automationAccountName'))), '2023-03-11').logsIngestion.endpoint)]",
+                "description": "Logs ingestion endpoint of the data collection endpoint for InPlaceUpgrade_CL."
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]",
+                "[resourceId('Microsoft.Insights/dataCollectionEndpoints', format('dce-{0}', parameters('automationAccountName')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Automation/automationAccounts/variables",
+              "apiVersion": "2023-11-01",
+              "name": "[format('{0}/{1}', parameters('automationAccountName'), 'InPlaceUpgrade-DataCollectionRuleId')]",
+              "properties": {
+                "isEncrypted": false,
+                "value": "[format('\"{0}\"', reference(resourceId('Microsoft.Insights/dataCollectionRules', format('dcr-{0}', parameters('automationAccountName'))), '2023-03-11').immutableId)]",
+                "description": "Immutable id of the data collection rule that routes Custom-InPlaceUpgrade_CL."
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]",
+                "[resourceId('Microsoft.Insights/dataCollectionRules', format('dcr-{0}', parameters('automationAccountName')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Automation/automationAccounts/runbooks",
+              "apiVersion": "2023-11-01",
+              "name": "[format('{0}/{1}', parameters('automationAccountName'), 'Invoke-InPlaceUpgradeRunbook')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "runbookType": "PowerShell72",
+                "logProgress": false,
+                "logVerbose": false,
+                "description": "Tag-driven in-place upgrades: Start once per maintenance window, Check every few minutes.",
+                "publishContentLink": {
+                  "uri": "[parameters('runbookContentUri')]",
+                  "version": "[parameters('contentVersion')]"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]",
+                "[resourceId('Microsoft.Automation/automationAccounts/powerShell72Modules', parameters('automationAccountName'), 'AzureInPlaceUpgrade')]"
+              ]
+            },
+            {
+              "type": "Microsoft.Automation/automationAccounts/schedules",
+              "apiVersion": "2023-11-01",
+              "name": "[format('{0}/{1}', parameters('automationAccountName'), 'inplaceupgrade-check')]",
+              "properties": {
+                "description": "Evaluates VMs in UpgradeStarted and finishes them.",
+                "frequency": "Minute",
+                "interval": "[parameters('checkIntervalMinutes')]",
+                "startTime": "[parameters('startScheduleTime')]",
+                "timeZone": "[parameters('scheduleTimeZone')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Automation/automationAccounts/schedules",
+              "apiVersion": "2023-11-01",
+              "name": "[format('{0}/{1}', parameters('automationAccountName'), 'inplaceupgrade-start')]",
+              "properties": {
+                "description": "Starts upgrades for VMs in UpgradeState=Pending, up to MaxParallel. Linked to the runbook only when enabled at deployment.",
+                "frequency": "Day",
+                "interval": 1,
+                "startTime": "[parameters('startScheduleTime')]",
+                "timeZone": "[parameters('scheduleTimeZone')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Automation/automationAccounts/jobSchedules",
+              "apiVersion": "2023-11-01",
+              "name": "[format('{0}/{1}', parameters('automationAccountName'), guid(resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName')), 'check', 'Invoke-InPlaceUpgradeRunbook'))]",
+              "properties": {
+                "schedule": {
+                  "name": "inplaceupgrade-check"
+                },
+                "runbook": {
+                  "name": "Invoke-InPlaceUpgradeRunbook"
+                },
+                "parameters": {
+                  "SubscriptionId": "[parameters('subscriptionIdForJobs')]",
+                  "Mode": "Check",
+                  "Ring": "[parameters('ring')]",
+                  "TimeoutMinutes": "[string(parameters('timeoutMinutes'))]"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]",
+                "[resourceId('Microsoft.Automation/automationAccounts/schedules', parameters('automationAccountName'), 'inplaceupgrade-check')]",
+                "[resourceId('Microsoft.Automation/automationAccounts/runbooks', parameters('automationAccountName'), 'Invoke-InPlaceUpgradeRunbook')]"
+              ]
+            },
+            {
+              "condition": "[parameters('startScheduleEnabled')]",
+              "type": "Microsoft.Automation/automationAccounts/jobSchedules",
+              "apiVersion": "2023-11-01",
+              "name": "[format('{0}/{1}', parameters('automationAccountName'), guid(resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName')), 'start', 'Invoke-InPlaceUpgradeRunbook'))]",
+              "properties": {
+                "schedule": {
+                  "name": "inplaceupgrade-start"
+                },
+                "runbook": {
+                  "name": "Invoke-InPlaceUpgradeRunbook"
+                },
+                "parameters": {
+                  "SubscriptionId": "[parameters('subscriptionIdForJobs')]",
+                  "Mode": "Start",
+                  "Ring": "[parameters('ring')]",
+                  "MaxParallel": "[string(parameters('maxParallel'))]"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]",
+                "[resourceId('Microsoft.Automation/automationAccounts/runbooks', parameters('automationAccountName'), 'Invoke-InPlaceUpgradeRunbook')]",
+                "[resourceId('Microsoft.Automation/automationAccounts/schedules', parameters('automationAccountName'), 'inplaceupgrade-start')]"
+              ]
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Insights/dataCollectionRules', format('dcr-{0}', parameters('automationAccountName')))]",
+              "name": "[guid(resourceId('Microsoft.Insights/dataCollectionRules', format('dcr-{0}', parameters('automationAccountName'))), resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName')), '3913510d-42f4-4e42-8a64-420c390055eb')]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '3913510d-42f4-4e42-8a64-420c390055eb')]",
+                "principalId": "[reference(resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName')), '2023-11-01', 'full').identity.principalId]",
+                "principalType": "ServicePrincipal"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]",
+                "[resourceId('Microsoft.Insights/dataCollectionRules', format('dcr-{0}', parameters('automationAccountName')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Insights/workbooks",
+              "apiVersion": "2023-06-01",
+              "name": "[guid(resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName')), 'inplaceupgrade-workbook')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "kind": "shared",
+              "properties": {
+                "displayName": "In-place upgrades",
+                "category": "workbook",
+                "sourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName'))]",
+                "version": "1.0",
+                "serializedData": "[replace(variables('$fxv#0'), '{workspaceId}', resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName')))]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "principalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName')), '2023-11-01', 'full').identity.principalId]"
+            },
+            "logIngestionEndpoint": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Insights/dataCollectionEndpoints', format('dce-{0}', parameters('automationAccountName'))), '2023-03-11').logsIngestion.endpoint]"
+            },
+            "dataCollectionRuleId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Insights/dataCollectionRules', format('dcr-{0}', parameters('automationAccountName'))), '2023-03-11').immutableId]"
+            },
+            "automationAccountId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]"
+            },
+            "workspaceId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName'))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', parameters('resourceGroupName'))]"
+      ]
+    },
+    {
+      "condition": "[empty(parameters('targetResourceGroupName'))]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "operator-role-assignment-subscription",
+      "location": "[deployment().location]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "principalId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'automation'), '2025-04-01').outputs.principalId.value]"
+          },
+          "roleDefinitionId": {
+            "value": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', guid(subscription().id, parameters('roleName')))]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.44.1.10279",
+              "templateHash": "2633751893185230855"
+            }
+          },
+          "parameters": {
+            "principalId": {
+              "type": "string"
+            },
+            "roleDefinitionId": {
+              "type": "string"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(subscription().id, parameters('principalId'), parameters('roleDefinitionId'))]",
+              "properties": {
+                "roleDefinitionId": "[parameters('roleDefinitionId')]",
+                "principalId": "[parameters('principalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'automation')]",
+        "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', guid(subscription().id, parameters('roleName')))]"
+      ]
+    },
+    {
+      "condition": "[not(empty(parameters('targetResourceGroupName')))]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "operator-role-assignment-resourcegroup",
+      "resourceGroup": "[parameters('targetResourceGroupName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "principalId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'automation'), '2025-04-01').outputs.principalId.value]"
+          },
+          "roleDefinitionId": {
+            "value": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', guid(subscription().id, parameters('roleName')))]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.44.1.10279",
+              "templateHash": "307270918512986989"
+            }
+          },
+          "parameters": {
+            "principalId": {
+              "type": "string"
+            },
+            "roleDefinitionId": {
+              "type": "string"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(resourceGroup().id, parameters('principalId'), parameters('roleDefinitionId'))]",
+              "properties": {
+                "roleDefinitionId": "[parameters('roleDefinitionId')]",
+                "principalId": "[parameters('principalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'automation')]",
+        "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', guid(subscription().id, parameters('roleName')))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "automationAccountId": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'automation'), '2025-04-01').outputs.automationAccountId.value]"
+    },
+    "principalId": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'automation'), '2025-04-01').outputs.principalId.value]"
+    },
+    "roleDefinitionId": {
+      "type": "string",
+      "value": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', guid(subscription().id, parameters('roleName')))]"
+    },
+    "workspaceId": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'automation'), '2025-04-01').outputs.workspaceId.value]"
+    },
+    "logIngestionEndpoint": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'automation'), '2025-04-01').outputs.logIngestionEndpoint.value]"
+    },
+    "dataCollectionRuleId": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'automation'), '2025-04-01').outputs.dataCollectionRuleId.value]"
+    }
+  }
+}

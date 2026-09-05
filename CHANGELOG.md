@@ -5,6 +5,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0-preview] - 2026-09-05
+
 ### Added
 - Module skeleton `AzureInPlaceUpgrade` (PowerShell 7.2+).
 - Versioned target matrix (`targets.json`): WS2025 from 2012 R2 / 2016 / 2019 / 2022, WS2022 from

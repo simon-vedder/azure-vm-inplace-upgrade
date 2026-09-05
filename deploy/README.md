@@ -5,6 +5,9 @@ against.
 
 ## Orchestrator (`main.bicep`)
 
+`azuredeploy.json` is the compiled form of `main.bicep` for the *Deploy to Azure* button; CI fails
+when the two drift apart (`az bicep build -f deploy/main.bicep --outfile deploy/azuredeploy.json`).
+
 Subscription-scope deployment, because the custom role definition lives there:
 
 ```bash

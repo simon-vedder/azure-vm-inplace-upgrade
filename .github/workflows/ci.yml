@@ -64,3 +64,19 @@ jobs:
         with:
           name: test-results
           path: TestResults.xml
+
+  bicep:
+    name: Bicep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and compare the compiled template
+        run: |
+          az bicep build -f deploy/main.bicep --outfile /tmp/azuredeploy.json
+          az bicep build -f deploy/lab.bicep --stdout > /dev/null
+          if ! diff -q <(jq -S 'del(.metadata)' /tmp/azuredeploy.json) <(jq -S 'del(.metadata)' deploy/azuredeploy.json) > /dev/null; then
+            echo "deploy/azuredeploy.json is stale; run: az bicep build -f deploy/main.bicep --outfile deploy/azuredeploy.json"
+            exit 1
+          fi
+          echo "azuredeploy.json matches main.bicep"
