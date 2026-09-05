@@ -163,7 +163,7 @@ A tag value that is not a key here never reaches an Azure image.
 
 | Target | Sources (build) | Engines | Verified in this project |
 |---|---|---|---|
-| `WS2025` | 2012 R2 (9600), 2016 (14393), 2019 (17763), 2022 (20348) | MediaDisk; FeatureUpdate for 2019/2022 (experimental) | **2022 ✅ (Desktop Experience and Core), 2016 ✅** 2026-09-05; 2012 R2 and 2019 not yet |
+| `WS2025` | 2012 R2 (9600), 2016 (14393), 2019 (17763), 2022 (20348) | MediaDisk; FeatureUpdate for 2019/2022 (experimental) | **2022 ✅ (Desktop Experience and Core), 2019 ✅, 2016 ✅** 2026-09-05 with MediaDisk; 2012 R2 not yet |
 | `WS2022` | 2016 (14393), 2019 (17763) | MediaDisk | not yet |
 | `WS2019` | 2012 R2 (9600), 2016 (14393) | MediaDisk | not yet |
 
@@ -187,6 +187,7 @@ Three lab runs on 2026-09-05 with `Invoke-InPlaceUpgrade`, fresh Marketplace VMs
 | `2022-datacenter-g2` | 4, Datacenter (Desktop Experience) | 37 min | Completed, Desktop Experience kept |
 | `2022-datacenter-core-g2` | 3, Datacenter (Core) | 23 min | Completed, still Server Core, no `explorer.exe` |
 | `2016-datacenter-gensecond` | 4, Datacenter (Desktop Experience) | 42 min | Completed, 24H2 |
+| `2019-datacenter-gensecond` | 4, Datacenter (Desktop Experience) | 43 min | Completed, driven by the Automation runbook, six telemetry records |
 
 The 2016 guest's older DISM reports the image name as `Windows Server 2025 SERVERDATACENTER`
 instead of `Datacenter (Desktop Experience)`; the selection matches `EditionId` and
@@ -273,8 +274,8 @@ tests/                       Pester
 4. ✅ Runbook wrapper, `Start` / `Check` modes.
 5. ✅ Bicep: Automation Account, custom role, module import, schedules; deployed and driven end to end in the lab.
 6. FeatureUpdate spike.
-7. ✅ Log Analytics table + workbook (deployed; first records under verification). Deploy-to-Azure button pending.
-8. Lab: 2019 → 2025, 2012 R2 → 2025, the 2022 and 2019 targets, Trusted Launch.
+7. ✅ Log Analytics table + workbook; six records for one upgrade verified end to end. Deploy-to-Azure button pending.
+8. Lab: 2012 R2 → 2025, the 2022 and 2019 targets, Trusted Launch, the FeatureUpdate engine.
 9. PowerShell Gallery release.
 
 ## Contributing and security

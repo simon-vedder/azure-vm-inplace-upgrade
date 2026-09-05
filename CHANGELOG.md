@@ -37,6 +37,10 @@ All notable changes to this project are documented here. The format follows
   treated as Setup failures.
 
 ### Verified
+- 2026-09-05: **Windows Server 2019 Datacenter → 2025 through the Automation runbook with
+  telemetry**: Start job, three scheduled Check jobs, Completed after 43 minutes; six records in
+  `InPlaceUpgrade_CL` from NotEligible (pending reboot on the fresh VM) to Completed.
+  `targets.json` marks 17763 → 26100 as verified.
 - 2026-09-05: **Azure Automation path end to end.** `deploy/main.bicep` deployed at subscription
   scope (custom role, assignment on the VM resource group, Automation Account with the module
   imported from a package URI, PowerShell 7.2 runbook, schedules). A `Start` job launched the
