@@ -491,6 +491,12 @@ Describe 'Readiness rules (Resolve-InPlaceUpgradeReadiness)' {
         $r.MediaImageVersion | Should -Be '26100.4652.250712'
         $r.Failures | Should -Be 0
         $r.Warnings | Should -Be 0
+        (Get-Check $r 'SourceBuild').Detail | Should -Match 'lab-verified'
+    }
+
+    It 'says so when a documented path has not been verified here yet' {
+        $r = & $Private.Resolve -Target $Target2025 -ArmFacts (New-ArmFacts) -GuestFacts (New-GuestFacts @{ Build = 14393; ProductName = 'Windows Server 2016 Datacenter' }) -Media $MediaPresent
+        (Get-Check $r 'SourceBuild').Result | Should -Be 'Pass'
         (Get-Check $r 'SourceBuild').Detail | Should -Match 'not yet verified'
     }
 

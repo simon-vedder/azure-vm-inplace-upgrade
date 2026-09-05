@@ -36,7 +36,7 @@ documented by Microsoft. Each entry says which. "To verify" means it is on the l
   `/installfrom` and `/imageindex 4`, no `/pkey`)*
 - **After the upgrade the guest shows a pending reboot and license status 5 again.** *(observed)*
   CBS asks for one more reboot and the new OS re-activates against Azure KMS on its own within
-  minutes; `Windows.old` (about 5 GB here) stays for the rollback window. The preflight reports
+  minutes (status 1 again ten minutes after the upgrade, no action taken); `Windows.old` (about 5 GB here) stays for the rollback window. The preflight reports
   AlreadyAtTarget and Complete skips the VM, so neither is a problem for the tool.
 - **`/pkey` is not the answer to `0xC1900215`.** *(observed)* Microsoft Q&A threads recommend
   the target version's KMS client setup key. It validates, and Setup still fails at image
