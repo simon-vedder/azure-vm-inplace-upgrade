@@ -33,6 +33,10 @@ Nothing starts an upgrade by itself. The Start schedule is created but not linke
 until you redeploy with `startScheduleEnabled=true`, and even then only VMs tagged
 `UpgradeState=Pending` are touched.
 
+Tearing down: `az group delete` removes everything in the resource group, but the custom role
+definition lives at subscription scope and stays behind. Remove it with
+`az role definition delete --name "Azure VM In-Place Upgrade Operator"` once no assignment uses it.
+
 Before the first Gallery release, point `modulePackageUri` at a GitHub release asset (a zip of
 `src/AzureInPlaceUpgrade`) and `runbookContentUri` at the raw runbook URL of a tag. When the content
 behind an unchanged URI changes, bump `contentVersion` (defaults to `moduleVersion`, must look like a `System.Version`, e.g. `0.2.0.7`): Automation
