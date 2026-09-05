@@ -91,15 +91,19 @@ function Get-InPlaceUpgradeCandidate {
         throw '-Name requires -ResourceGroupName.'
     }
 
-    $vms = if ($Name) {
-        @(Get-AzVM -ResourceGroupName $ResourceGroupName -Name $Name -ErrorAction Stop)
-    }
-    elseif ($ResourceGroupName) {
-        @(Get-AzVM -ResourceGroupName $ResourceGroupName -ErrorAction Stop)
-    }
-    else {
-        @(Get-AzVM -ErrorAction Stop)
-    }
+    # The outer @() is not decoration: output of an if statement is enumerated on assignment, so
+    # a single VM would arrive as a scalar and '.Count' below would throw under strict mode.
+    $vms = @(
+        if ($Name) {
+            Get-AzVM -ResourceGroupName $ResourceGroupName -Name $Name -ErrorAction Stop
+        }
+        elseif ($ResourceGroupName) {
+            Get-AzVM -ResourceGroupName $ResourceGroupName -ErrorAction Stop
+        }
+        else {
+            Get-AzVM -ErrorAction Stop
+        }
+    )
     Write-Verbose "Discovered $($vms.Count) VM(s) in scope."
 
     foreach ($vm in $vms) {

@@ -65,6 +65,10 @@ documented by Microsoft. Each entry says which. "To verify" means it is on the l
 - **A public GVLK is not a KMS host key** and never will be. *(Microsoft)*
 - **The upgrade media requires volume-license (KMS) activation on the guest.** *(Microsoft)*
   Marketplace VMs have it; imported VMs may not. Retail/OEM channels are flagged.
+- **A Marketplace VM in a new VNet is often not activated at all.** *(observed, 2026-09-05)* VNets
+  created after September 2025 have no default outbound access, so the guest never reaches
+  `kms.core.windows.net:1688` and sits in license status 5 (Notification) with the correct GVLK
+  channel. Whether Setup cares is on the lab list; the preflight warns.
 
 ## Windows Update feature update (WS2019/2022 → 2025)
 

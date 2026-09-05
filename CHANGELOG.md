@@ -16,3 +16,10 @@ All notable changes to this project are documented here. The format follows
   media image availability, structured pass/warn/fail checks and an eligibility decision.
 - Pester tests for the matrix, target resolution, tag filtering, guest output parsing and every
   readiness rule.
+- `deploy/lab.bicep`: one tagged source VM without public IP for lab verification.
+
+### Verified
+- 2026-09-05: `Test-InPlaceUpgradeReadiness` end to end against a fresh Windows Server 2022
+  Datacenter (2022-datacenter-g2) VM in westeurope: 19 checks, 65 seconds, media image
+  `server2025Upgrade` 26100.33296.260809 found. Found and fixed: single-VM discovery returned a
+  scalar (if-statement unrolling) and threw under strict mode.

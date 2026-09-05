@@ -112,8 +112,14 @@ function Resolve-InPlaceUpgradeReadiness {
         if ($GuestFacts.SetupRunning) { Add-Check 'SetupRunning' 'Fail' 'Windows Setup is already running in the guest.' }
         else { Add-Check 'SetupRunning' 'Pass' 'No Setup process running.' }
 
+        # SoftwareLicensingProduct.LicenseStatus: 0 Unlicensed, 1 Licensed, 2 OOB grace, 3 OOT grace,
+        # 4 non-genuine grace, 5 Notification, 6 extended grace. Only 1 is "activated".
         $channel = [string]$GuestFacts.ActivationChannel
-        if ($channel -like 'Volume*') { Add-Check 'Activation' 'Pass' "Activation channel $channel." }
+        $licenseStatus = [int]$GuestFacts.LicenseStatus
+        if ($channel -like 'Volume*') {
+            if ($licenseStatus -eq 1) { Add-Check 'Activation' 'Pass' "Activation channel $channel, Windows is activated." }
+            else { Add-Check 'Activation' 'Warn' "Activation channel $channel, but Windows is not activated (license status $licenseStatus). Azure KMS needs outbound TCP 1688 to kms.core.windows.net; VNets created after September 2025 have no default outbound access." }
+        }
         elseif ([string]::IsNullOrWhiteSpace($channel) -or $channel -ieq 'unknown') { Add-Check 'Activation' 'Warn' 'Activation channel could not be read; the upgrade media requires volume-license (KMS) activation.' }
         else { Add-Check 'Activation' 'Warn' "Activation channel is '$channel'; the upgrade media requires volume-license (KMS) activation. Install the KMS client setup key first." }
     }

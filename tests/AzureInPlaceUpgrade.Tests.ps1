@@ -219,6 +219,40 @@ Describe 'Tag selection (Test-CandidateTag)' {
     }
 }
 
+Describe 'Get-InPlaceUpgradeCandidate (Get-AzVM mocked)' {
+    BeforeAll {
+        Mock -ModuleName AzureInPlaceUpgrade Get-AzVM {
+            $all = @(
+                (New-FakeVM -Name 'vm-pending' -Tags @{ UpgradeTarget = 'WS2025'; UpgradeState = 'Pending' })
+                (New-FakeVM -Name 'vm-done' -Tags @{ UpgradeTarget = 'WS2025'; UpgradeState = 'Completed' })
+                (New-FakeVM -Name 'vm-untagged' -Tags @{})
+            )
+            if ($Name) { return ($all | Where-Object Name -eq $Name) }
+            return $all
+        }
+    }
+
+    It 'returns the single matching VM as one object, not nothing (regression: if-statement unrolling)' {
+        $result = @(Get-InPlaceUpgradeCandidate -ResourceGroupName 'rg-test')
+        $result.Count | Should -Be 1
+        $result[0].Name | Should -Be 'vm-pending'
+    }
+
+    It 'returns every tagged VM when the state filter is empty' {
+        @(Get-InPlaceUpgradeCandidate -ResourceGroupName 'rg-test' -State '').Name | Sort-Object | Should -Be @('vm-done', 'vm-pending')
+    }
+
+    It 'returns an untagged VM only with -Name and -IgnoreTags' {
+        @(Get-InPlaceUpgradeCandidate -ResourceGroupName 'rg-test' -Name 'vm-untagged').Count | Should -Be 0
+        @(Get-InPlaceUpgradeCandidate -ResourceGroupName 'rg-test' -Name 'vm-untagged' -IgnoreTags).Name | Should -Be 'vm-untagged'
+    }
+
+    It 'refuses -IgnoreTags without -Name and -Name without a resource group' {
+        { Get-InPlaceUpgradeCandidate -IgnoreTags } | Should -Throw '*only allowed together with -Name*'
+        { Get-InPlaceUpgradeCandidate -Name 'vm-x' } | Should -Throw '*requires -ResourceGroupName*'
+    }
+}
+
 Describe 'Guest output parsing (ConvertFrom-GuestFacts)' {
     It 'finds the facts line among other output' {
         $json = (New-GuestFacts) | ConvertTo-Json -Compress
@@ -390,6 +424,13 @@ Describe 'Readiness rules (Resolve-InPlaceUpgradeReadiness)' {
         (Get-Check $r 'Cluster').Result | Should -Be 'Fail'
         (Get-Check $r 'SetupRunning').Result | Should -Be 'Fail'
         $r.Failures | Should -Be 2
+    }
+
+    It 'warns when the volume-licensed guest is not activated (no outbound to Azure KMS)' {
+        $r = & $Private.Resolve -Target $Target2025 -ArmFacts (New-ArmFacts) -GuestFacts (New-GuestFacts @{ LicenseStatus = 5 }) -Media $MediaPresent
+        (Get-Check $r 'Activation').Result | Should -Be 'Warn'
+        (Get-Check $r 'Activation').Detail | Should -Match 'license status 5'
+        $r.Decision | Should -Be 'Eligible'
     }
 
     It 'warns on a non-volume activation channel but stays eligible' {
