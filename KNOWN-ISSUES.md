@@ -32,7 +32,12 @@ documented by Microsoft. Each entry says which. "To verify" means it is on the l
   `/installfrom <install.wim> /imageindex <n>`. On the `server2025Upgrade` media of 2026-09
   the images are 1 Standard Core, 2 Standard Desktop Experience, 3 Datacenter Core,
   4 Datacenter Desktop Experience; the module never assumes those numbers.
-  *(fix under live verification at the time of writing)*
+  *(verified 2026-09-05: the same VM that failed twice completed 2022 → 2025 in 37 minutes with
+  `/installfrom` and `/imageindex 4`, no `/pkey`)*
+- **After the upgrade the guest shows a pending reboot and license status 5 again.** *(observed)*
+  CBS asks for one more reboot and the new OS re-activates against Azure KMS on its own within
+  minutes; `Windows.old` (about 5 GB here) stays for the rollback window. The preflight reports
+  AlreadyAtTarget and Complete skips the VM, so neither is a problem for the tool.
 - **`/pkey` is not the answer to `0xC1900215`.** *(observed)* Microsoft Q&A threads recommend
   the target version's KMS client setup key. It validates, and Setup still fails at image
   selection. The module keeps `-UseMatrixProductKey` for guests whose own key does not validate.

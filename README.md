@@ -11,9 +11,11 @@ from Run Command, tracks the VM through a state machine across Azure Automation 
 the build inside the guest and cleans up. Windows Server 2012 R2, 2016, 2019 and 2022 to 2025,
 using the upgrade media Microsoft ships as a hidden Marketplace image.
 
-> **Status: pre-release.** Preflight, Start and Complete exist; the first end-to-end lab run is
-> in progress. Nothing in the target matrix is lab-verified yet, and the README will not claim
-> otherwise until it is. See [Roadmap](#roadmap).
+> **Status: pre-release.** Preflight, Start, Complete, the runbook wrapper and the Bicep
+> deployment exist. One path is lab-verified end to end: Windows Server 2022 Datacenter to 2025
+> on a Marketplace VM, 37 minutes from Setup start to build 26100. Everything else in the matrix
+> is documented by Microsoft and not yet exercised here. See [Verified](#verified) and
+> [Roadmap](#roadmap).
 
 ## Read this first
 
@@ -142,7 +144,7 @@ A tag value that is not a key here never reaches an Azure image.
 
 | Target | Sources (build) | Engines | Verified in this project |
 |---|---|---|---|
-| `WS2025` | 2012 R2 (9600), 2016 (14393), 2019 (17763), 2022 (20348) | MediaDisk; FeatureUpdate for 2019/2022 (experimental) | not yet |
+| `WS2025` | 2012 R2 (9600), 2016 (14393), 2019 (17763), 2022 (20348) | MediaDisk; FeatureUpdate for 2019/2022 (experimental) | **2022 → 2025 ✅ 2026-09-05**; others not yet |
 | `WS2022` | 2016 (14393), 2019 (17763) | MediaDisk | not yet |
 | `WS2019` | 2012 R2 (9600), 2016 (14393) | MediaDisk | not yet |
 
@@ -155,6 +157,41 @@ pull request that names the lab run ([CONTRIBUTING.md](CONTRIBUTING.md)).
 `setup.exe` from it. `FeatureUpdate` would use the Windows Update feature update for WS2019/2022;
 it is listed as experimental until a lab spike shows it can be triggered without a human
 ([ADR 0006](docs/decisions/0006-two-engines-media-disk-first.md)).
+
+## Verified
+
+Lab run of 2026-09-05, `Invoke-InPlaceUpgrade` against a fresh `2022-datacenter-g2` Marketplace
+VM (Standard_B2ms, westeurope, no public IP, `deploy/lab.bicep`):
+
+| Step | Duration |
+|---|---|
+| Preflight (Run Command probe + media lookup) | 35 s |
+| Incremental OS disk snapshot | 5 s |
+| Media disk from the hidden image, attach on LUN 0 | 25 s |
+| Locate `setup.exe`, list `install.wim` images, pick index 4 | 2 min |
+| Setup, downlevel phase (guest reachable, build still 20348) | 30 min |
+| Reboots and offline phases | 6 min |
+| Complete: build 26100 seen, tags, task removed, media disk deleted | 2 min |
+
+Result object of the run:
+
+```
+Result            : Completed
+Reason            : Windows Server 2025 Datacenter build 26100.
+Build             : 26100
+ProductName       : Windows Server 2025 Datacenter
+TaskState         : Ready
+TaskResult        : 0x00000000
+AgeMinutes        : 37
+Snapshot          : vm-ipu-2022-01-prews2025-20260905083758
+MediaDiskRemoved  : True
+```
+
+Afterwards the guest reports `DisplayVersion 24H2`, build `26100.33296`, `Windows.old` present.
+The VM's `instanceView.osVersion` says `10.0.26100.33296`; its `storageProfile.imageReference`
+still says `2022-datacenter-g2` and always will. Two earlier attempts on the same VM failed with
+`0xC1900215`, once without and once with `/pkey`; they are what led to the image-index detection.
+The details are in [KNOWN-ISSUES.md](KNOWN-ISSUES.md).
 
 ## Permissions
 
@@ -199,7 +236,7 @@ tests/                       Pester
    `Test-InPlaceUpgradeReadiness`, Pester for every rule.
 2. ✅ Lab: preflight against a 2022 guest (2016 and 2019 pending).
 3. ✅ `Start-InPlaceUpgrade` / `Complete-InPlaceUpgrade` / `Invoke-InPlaceUpgrade` with the
-   MediaDisk engine. First 2022 → 2025 lab run in progress.
+   MediaDisk engine; 2022 → 2025 verified in the lab.
 4. ✅ Runbook wrapper, `Start` / `Check` modes.
 5. ✅ Bicep: Automation Account, custom role, module import, schedules (written, not yet deployed in the lab).
 6. FeatureUpdate spike.

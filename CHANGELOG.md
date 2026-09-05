@@ -33,6 +33,11 @@ All notable changes to this project are documented here. The format follows
   treated as Setup failures.
 
 ### Verified
+- 2026-09-05: **Windows Server 2022 Datacenter → 2025 end to end** on a `2022-datacenter-g2`
+  Marketplace VM with `Invoke-InPlaceUpgrade`: 37 minutes from Setup start to build 26100,
+  snapshot reused from the previous attempt, media disk deleted, scheduled task removed. Two
+  earlier attempts failed with `0xC1900215` (without and with `/pkey`) and produced the
+  image-index detection. `targets.json` marks 20348 → 26100 as verified.
 - 2026-09-05: `Test-InPlaceUpgradeReadiness` end to end against a fresh Windows Server 2022
   Datacenter (2022-datacenter-g2) VM in westeurope: 19 checks, 65 seconds, media image
   `server2025Upgrade` 26100.33296.260809 found. Found and fixed: single-VM discovery returned a
