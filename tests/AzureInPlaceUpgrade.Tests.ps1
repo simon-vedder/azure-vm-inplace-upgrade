@@ -323,6 +323,11 @@ Describe 'Helpers' {
         & $Private.FromStamp -Value '' | Should -BeNullOrEmpty
     }
 
+    It 'knows the engine tag' {
+        $module = Get-Module AzureInPlaceUpgrade
+        (& $module { $script:Tag.Engine }) | Should -Be 'UpgradeEngine'
+    }
+
     It 'derives a stable media disk name' {
         & $Private.MediaName -VMName 'vm-a' -Target 'WS2025' | Should -Be 'vm-a-upgrademedia-ws2025'
     }

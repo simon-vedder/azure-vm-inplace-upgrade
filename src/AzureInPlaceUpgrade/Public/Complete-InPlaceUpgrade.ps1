@@ -99,6 +99,7 @@ function Complete-InPlaceUpgrade {
         $state = Get-VMTagValue -VM $VM -Name $script:Tag.State
         $targetName = Get-VMTagValue -VM $VM -Name $script:Tag.Target
         $snapshotName = Get-VMTagValue -VM $VM -Name $script:Tag.Snapshot
+        $engineTag = Get-VMTagValue -VM $VM -Name $script:Tag.Engine
         $status = $null
         $decision = $null
         $logExcerpt = $null
@@ -194,7 +195,7 @@ function Complete-InPlaceUpgrade {
 
         $recordState = switch ($decision.Result) { 'Completed' { $script:State.Completed } 'Failed' { $script:State.Failed } default { $script:State.UpgradeStarted } }
         $record = ConvertTo-UpgradeRecord -VMName $vmName -ResourceGroupName $rg -State $recordState -Result $decision.Result -Reason $decision.Reason `
-            -Target $targetObject.Name -Engine $(if ($mediaRef) { 'MediaDisk' } else { 'FeatureUpdate' }) -TargetBuild $targetObject.TargetBuild `
+            -Target $targetObject.Name -Engine $(if ($engineTag) { $engineTag } elseif ($mediaRef) { 'MediaDisk' } else { 'FeatureUpdate' }) -TargetBuild $targetObject.TargetBuild `
             -SourceBuild $(if ($status) { $status.Build } else { $null }) -DurationMinutes $decision.AgeMinutes `
             -TaskResult $(if ($status -and $null -ne $status.TaskResult) { '0x{0:X8}' -f [uint32]$status.TaskResult } else { '' }) `
             -Snapshot $(if ($snapshotName) { $snapshotName } else { '' }) -MediaDisk $(if ($mediaRef) { $mediaRef } else { '' }) -Mode 'Check' `

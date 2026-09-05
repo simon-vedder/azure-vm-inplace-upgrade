@@ -15,6 +15,7 @@ $script:Tag = @{
     # the next run and let Complete find what Start created without guessing names.
     Snapshot  = 'UpgradeSnapshot'
     MediaDisk = 'UpgradeMediaDisk'
+    Engine    = 'UpgradeEngine'
 }
 
 # Inside the guest: the scheduled task that runs Setup, and where /copylogs puts the logs.

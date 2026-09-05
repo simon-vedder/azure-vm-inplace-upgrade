@@ -22,7 +22,8 @@ All notable changes to this project are documented here. The format follows
 - `Complete-InPlaceUpgrade` — evaluates `UpgradeStarted` VMs to Completed / Failed / InProgress,
   fetches the Panther log excerpt on failure, removes the media disk and the scheduled task.
 - `Invoke-InPlaceUpgrade` — Start plus polling Complete, for local runs and Hybrid Workers.
-- Tags `UpgradeSnapshot` and `UpgradeMediaDisk` point at the artefacts of the current run.
+- Tags `UpgradeSnapshot` and `UpgradeMediaDisk` point at the artefacts of the current run;
+  `UpgradeEngine` records which engine Start used.
 - `src/runbooks/Invoke-InPlaceUpgradeRunbook.ps1`: thin Azure Automation wrapper with Start and
   Check modes, ring filter and a parallelism limit that counts VMs already in progress.
 - `deploy/main.bicep`: subscription-scope deployment of Automation Account, identity, custom
@@ -37,6 +38,9 @@ All notable changes to this project are documented here. The format follows
   treated as Setup failures.
 
 ### Verified
+- 2026-09-05: **FeatureUpdate engine end to end**: `Start -Engine FeatureUpdate` on a 2022
+  Marketplace VM, finished by the scheduled Check jobs 186 minutes later with build 26100.33296
+  and nine telemetry records. Slower than the media disk by a factor of three to five.
 - 2026-09-05: **Windows Server 2025 feature update installed unattended** on a 2022 Marketplace
   VM through the Windows Update Agent (policy opt-in, `DeploymentAction='OptionalInstallation'`
   search, download, install, `Commit(0)`, orchestrator restart): build 26100.33296 after about

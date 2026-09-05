@@ -11,7 +11,7 @@ function Start-InPlaceUpgrade {
     30 to 120 minutes and several reboots and is finished by Complete-InPlaceUpgrade.
 
     Tags written: UpgradeState (SnapshotCreated, then UpgradeStarted), UpgradeSnapshot,
-    UpgradeMediaDisk, UpgradeStartedAt (Unix epoch seconds, UTC). On any failure the state becomes Failed, the media disk
+    UpgradeEngine, UpgradeMediaDisk (MediaDisk engine only), UpgradeStartedAt (Unix epoch seconds, UTC). On any failure the state becomes Failed, the media disk
     is removed unless -KeepMediaDisk is set, and the snapshot stays.
 
     Idempotent: a VM already in UpgradeStarted or Completed is skipped, a VM in SnapshotCreated or
@@ -271,6 +271,7 @@ function Start-InPlaceUpgrade {
         $tagSnapshot = $script:Tag.Snapshot
         $tagMediaDisk = $script:Tag.MediaDisk
         $tagStartedAt = $script:Tag.StartedAt
+        $tagEngine = $script:Tag.Engine
 
         try {
             $existingSnapshot = Get-VMTagValue -VM $VM -Name $tagSnapshot
@@ -286,7 +287,7 @@ function Start-InPlaceUpgrade {
                 $snapshotName = (New-VMOSSnapshot -VM $VM -Target $targetName).Name
                 Write-Verbose "[$vmName] Snapshot '$snapshotName' created."
             }
-            Set-UpgradeTag -ResourceId $VM.Id -Tag @{ $tagState = $script:State.SnapshotCreated; $tagSnapshot = $snapshotName }
+            Set-UpgradeTag -ResourceId $VM.Id -Tag @{ $tagState = $script:State.SnapshotCreated; $tagSnapshot = $snapshotName; $tagEngine = $Engine }
             Write-StartRecord -State $script:State.SnapshotCreated -Result 'SnapshotCreated' -Reason "Snapshot $snapshotName"
 
             if ($Engine -eq 'FeatureUpdate') {

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "notes": [
     "Only source/target pairs that Microsoft documents as supported in-place upgrade paths for Azure VMs are listed.",
-    "verified=true means the path ran end to end in this project's lab with the MediaDisk engine. false means documented by Microsoft, not yet exercised here. Flip it only with a lab run in the pull request. Verified so far (2026-09-05, B2ms, westeurope, MediaDisk engine): 20348 -> 26100 Desktop Experience in 37 min and Server Core in 23 min; 14393 -> 26100 Desktop Experience in 42 min; 17763 -> 26100 Desktop Experience in 43 min through Azure Automation.",
+    "verified=true means the path ran end to end in this project's lab with the MediaDisk engine. false means documented by Microsoft, not yet exercised here. Flip it only with a lab run in the pull request. Verified so far (2026-09-05, B2ms, westeurope, MediaDisk engine): 20348 -> 26100 Desktop Experience in 37 min and Server Core in 23 min; 14393 -> 26100 Desktop Experience in 42 min; 17763 -> 26100 Desktop Experience in 43 min through Azure Automation; 20348 -> 26100 with the FeatureUpdate engine in 186 min (2026-09-05).",
     "productKeys are Microsoft's public KMS client setup keys (GVLK) for the TARGET version. They are handed to setup.exe /pkey only when Setup cannot resolve the edition against the multi-edition install.wim (HRESULT 0xC1900215). They activate nothing.",
     "architecture uses the Win32_OperatingSystem.OSArchitecture spelling because that is what the guest probe reports."
   ],
@@ -27,7 +27,7 @@
           "sku": "server2025Upgrade"
         },
         "FeatureUpdate": {
-          "status": "experimental",
+          "status": "verified-once",
           "registryOptIn": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate\\AllowWindowsServerFeatureUpdate",
           "requiredUpdates": { "17763": "KB5078752", "20348": "KB5078766" },
           "searchCriteria": "IsInstalled=0 and DeploymentAction='OptionalInstallation'",

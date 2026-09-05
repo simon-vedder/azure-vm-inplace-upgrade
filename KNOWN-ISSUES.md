@@ -156,6 +156,11 @@ documented by Microsoft. Each entry says which. "To verify" means it is on the l
   (a fresh installer without it answers `0x80240004`), then a restart through the update
   orchestrator (`UsoClient RestartDevice`, `shutdown /r` as fallback). Commit itself ran four
   minutes. The engine's worker does exactly this.
+- **The feature update empties `C:\Windows\Temp`.** *(observed)* The worker's log under
+  `C:\Windows\Temp\AzureInPlaceUpgrade` is gone after the upgrade, so a post-upgrade log excerpt
+  is not available for this engine; the Windows Update history (`Windows Server 2025`, result 2)
+  is the record that survives. The engine's end-to-end run took 186 minutes against 37 for the
+  media disk on the same image; the install phase alone ran over two hours.
 
 ## Rollback
 

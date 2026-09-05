@@ -151,7 +151,8 @@ and activity over time. Locally, pass `-LogIngestionEndpoint` and `-DataCollecti
 | `UpgradeRing` | free text, e.g. `Ring0` | optional; the orchestrator can be told to process one ring |
 | `UpgradeStartedAt` | Unix epoch seconds (UTC), written by the tool | timeout base for the Check job |
 | `UpgradeSnapshot` | snapshot name, written by the tool | the rollback point of the current run |
-| `UpgradeMediaDisk` | `<resource group>/<disk name>`, written by the tool | what Complete cleans up |
+| `UpgradeMediaDisk` | `<resource group>/<disk name>`, written by the tool | what Complete cleans up (MediaDisk engine only) |
+| `UpgradeEngine` | `MediaDisk` or `FeatureUpdate`, written by the tool | which engine Start used |
 
 No approval tag, no history in tags. History goes to Log Analytics
 ([ADR 0002](docs/decisions/0002-tags-are-state-logs-are-history.md)).
@@ -173,10 +174,10 @@ pull request that names the lab run ([CONTRIBUTING.md](CONTRIBUTING.md)).
 
 **Engines.** `MediaDisk` (default) creates a managed disk from Microsoft's hidden
 `MicrosoftWindowsServer/WindowsServerUpgrade/server2025Upgrade` image, attaches it and runs
-`setup.exe` from it. `FeatureUpdate` (experimental, `Start -Engine FeatureUpdate`, WS2019/2022 only)
+`setup.exe` from it. `FeatureUpdate` (`Start -Engine FeatureUpdate`, WS2019/2022 only, verified once end to end)
 opts the guest in, finds the Windows Server 2025 feature update through the Windows Update Agent
 and installs it from a scheduled task, no media disk involved. Both reached build 26100 in the
-lab; the feature update took about two hours where the media disk took 37 minutes
+lab; the feature update took two to three hours where the media disk took 37 minutes
 ([ADR 0006](docs/decisions/0006-two-engines-media-disk-first.md), [KNOWN-ISSUES.md](KNOWN-ISSUES.md)).
 
 ## Verified
@@ -190,7 +191,8 @@ Three lab runs on 2026-09-05 with `Invoke-InPlaceUpgrade`, fresh Marketplace VMs
 | `2022-datacenter-core-g2` | 3, Datacenter (Core) | 23 min | Completed, still Server Core, no `explorer.exe` |
 | `2016-datacenter-gensecond` | 4, Datacenter (Desktop Experience) | 42 min | Completed, 24H2 |
 | `2019-datacenter-gensecond` | 4, Datacenter (Desktop Experience) | 43 min | Completed, driven by the Automation runbook, six telemetry records |
-| `2022-datacenter-g2`, FeatureUpdate spike | Windows Update feature update, no media | ~2 h | build 26100.33296; the engine in the module is derived from this spike, its own end-to-end run is in progress |
+| `2022-datacenter-g2`, FeatureUpdate spike | Windows Update feature update, no media | ~2 h | build 26100.33296; the spike that shaped the engine |
+| `2022-datacenter-g2`, `Start -Engine FeatureUpdate` | Windows Update feature update, no media | 186 min | Completed by the scheduled Check jobs, nine telemetry records; the engine's own end-to-end run |
 
 The 2016 guest's older DISM reports the image name as `Windows Server 2025 SERVERDATACENTER`
 instead of `Datacenter (Desktop Experience)`; the selection matches `EditionId` and
@@ -276,9 +278,9 @@ tests/                       Pester
    MediaDisk engine; 2022 → 2025 (Desktop Experience and Core) and 2016 → 2025 verified in the lab.
 4. ✅ Runbook wrapper, `Start` / `Check` modes.
 5. ✅ Bicep: Automation Account, custom role, module import, schedules; deployed and driven end to end in the lab.
-6. ✅ FeatureUpdate spike: the feature update installs unattended through the Windows Update Agent with `Commit()` before the restart; engine implemented as experimental.
+6. ✅ FeatureUpdate engine: spike, then one end-to-end run through the module and the scheduled Check jobs.
 7. ✅ Log Analytics table + workbook; six records for one upgrade verified end to end. Deploy-to-Azure button pending.
-8. Lab: 2012 R2 → 2025, the 2022 and 2019 targets, Trusted Launch, the FeatureUpdate engine.
+8. Lab: 2012 R2 → 2025, the 2022 and 2019 targets, Trusted Launch.
 9. PowerShell Gallery release.
 
 ## Contributing and security
