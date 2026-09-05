@@ -29,7 +29,9 @@
         "FeatureUpdate": {
           "status": "experimental",
           "registryOptIn": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsUpdate\\AllowWindowsServerFeatureUpdate",
-          "requiredUpdates": { "17763": "KB5078752", "20348": "KB5078766" }
+          "requiredUpdates": { "17763": "KB5078752", "20348": "KB5078766" },
+          "searchCriteria": "IsInstalled=0 and DeploymentAction='OptionalInstallation'",
+          "titlePrefix": "Windows Server 2025"
         }
       },
       "productKeys": {

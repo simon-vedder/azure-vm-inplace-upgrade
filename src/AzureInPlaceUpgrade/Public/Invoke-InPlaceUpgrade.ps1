@@ -22,7 +22,7 @@ function Invoke-InPlaceUpgrade {
     Target key from the matrix, for example WS2025. Defaults to the VM's UpgradeTarget tag.
 
     .PARAMETER Engine
-    Upgrade engine. Only MediaDisk is implemented.
+    MediaDisk (default) or FeatureUpdate (experimental, WS2019/WS2022 only); see Start-InPlaceUpgrade.
 
     .PARAMETER MediaDiskResourceGroupName
     Resource group for the media disk. Defaults to the VM's resource group.
@@ -97,7 +97,7 @@ function Invoke-InPlaceUpgrade {
         [string]$Target,
 
         [Parameter()]
-        [ValidateSet('MediaDisk')]
+        [ValidateSet('MediaDisk', 'FeatureUpdate')]
         [string]$Engine = 'MediaDisk',
 
         [Parameter()]

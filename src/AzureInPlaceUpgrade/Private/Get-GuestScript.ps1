@@ -13,6 +13,8 @@ function Get-GuestScript {
     SetupPath  bring the media disk online and locate setup.exe
     WimImages  list the images in the media's install.wim with edition and installation type
     Launch     register and start the scheduled task that runs Setup (ADR 0001)
+    FeatureUpdateLaunch  opt in, find the Windows Server feature update through the Windows Update
+               Agent and start a scheduled task that downloads, installs and reboots (ADR 0006)
     Status     build number, Setup processes, task state and last result
     LogTail    excerpt of the Panther logs after a failure
     RemoveTask unregister the scheduled task after a final state
@@ -21,7 +23,7 @@ function Get-GuestScript {
     [OutputType([string])]
     param(
         [Parameter(Mandatory)]
-        [ValidateSet('Facts', 'SetupPath', 'WimImages', 'Launch', 'Status', 'LogTail', 'RemoveTask')]
+        [ValidateSet('Facts', 'SetupPath', 'WimImages', 'Launch', 'FeatureUpdateLaunch', 'Status', 'LogTail', 'RemoveTask')]
         [string]$Name
     )
 
@@ -206,6 +208,89 @@ Write-Output ('RESULT={0};STATE={1};LASTRESULT={2};HEX={3};PROCESSES={4};ARGS={5
 '@
         }
 
+        'FeatureUpdateLaunch' {
+            return @'
+param([string]$TaskName, [string]$LogDirectory, [string]$RegistryOptIn, [string]$SearchCriteria, [string]$TitlePrefix)
+$ErrorActionPreference = 'Stop'
+
+$existing = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+if ($existing -and $existing.State -eq 'Running') {
+    Write-Output 'RESULT=ALREADYRUNNING'
+    exit 0
+}
+
+New-Item -Path $LogDirectory -ItemType Directory -Force | Out-Null
+
+# Opt in: without this policy value Windows Update never offers the feature update.
+New-Item -Path $RegistryOptIn -Force | Out-Null
+New-ItemProperty -Path $RegistryOptIn -Name 'AllowWindowsServerFeatureUpdate' -PropertyType DWord -Value 1 -Force | Out-Null
+
+$session = New-Object -ComObject Microsoft.Update.Session
+$searcher = $session.CreateUpdateSearcher()
+$found = $null
+$offered = @()
+foreach ($u in $searcher.Search($SearchCriteria).Updates) {
+    $offered += $u.Title
+    if ($u.Title -like ($TitlePrefix + '*')) { $found = $u }
+}
+if (-not $found) {
+    Write-Output ('RESULT=NOTOFFERED;OFFERED={0}' -f ($offered -join '|'))
+    exit 0
+}
+
+$workerPath = Join-Path $LogDirectory 'feature-update-worker.ps1'
+$worker = @"
+`$ErrorActionPreference = 'Continue'
+`$log = '$LogDirectoryeature-update.log'
+function Write-Log([string]`$m) { ('{0:u} {1}' -f (Get-Date), `$m) | Out-File -FilePath `$log -Append -Encoding utf8 }
+try {
+    Write-Log 'worker start'
+    `$session = New-Object -ComObject Microsoft.Update.Session
+    `$searcher = `$session.CreateUpdateSearcher()
+    `$update = `$null
+    foreach (`$u in `$searcher.Search("$SearchCriteria").Updates) { if (`$u.Title -like '$TitlePrefix*') { `$update = `$u } }
+    if (-not `$update) { Write-Log 'feature update no longer offered'; exit 1 }
+    Write-Log ('found ' + `$update.Title + ' ' + `$update.Identity.UpdateID)
+    if (-not `$update.EulaAccepted) { `$update.AcceptEula() }
+    `$coll = New-Object -ComObject Microsoft.Update.UpdateColl
+    `$null = `$coll.Add(`$update)
+    if (-not `$update.IsDownloaded) {
+        `$downloader = `$session.CreateUpdateDownloader()
+        `$downloader.Updates = `$coll
+        Write-Log 'download start'
+        `$dr = `$downloader.Download()
+        Write-Log ('download result ' + `$dr.ResultCode + ' hr 0x' + ('{0:X8}' -f `$dr.HResult))
+        if (`$dr.ResultCode -ne 2) { exit 1 }
+    }
+    `$installer = `$session.CreateUpdateInstaller()
+    `$installer.Updates = `$coll
+    `$installer.AllowSourcePrompts = `$false
+    `$installer.ForceQuiet = `$true
+    Write-Log 'install start'
+    `$ir = `$installer.Install()
+    Write-Log ('install result ' + `$ir.ResultCode + ' hr 0x' + ('{0:X8}' -f `$ir.HResult) + ' reboot ' + `$ir.RebootRequired)
+    if (`$ir.ResultCode -ne 2 -and `$ir.ResultCode -ne 3) { exit 1 }
+    if (`$ir.RebootRequired) { Write-Log 'rebooting'; Restart-Computer -Force }
+}
+catch { Write-Log ('error ' + `$_.Exception.Message); exit 1 }
+"@
+Set-Content -Path $workerPath -Value $worker -Encoding UTF8
+
+$action = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument ('-NoProfile -ExecutionPolicy Bypass -File "{0}"' -f $workerPath)
+$principal = New-ScheduledTaskPrincipal -UserId 'NT AUTHORITY\SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+    -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 0 -MultipleInstances IgnoreNew -DontStopOnIdleEnd
+Register-ScheduledTask -TaskName $TaskName -Action $action -Principal $principal -Settings $settings `
+    -Description 'Unattended Windows Server feature update (azure-vm-inplace-upgrade)' -Force | Out-Null
+Start-ScheduledTask -TaskName $TaskName
+Start-Sleep -Seconds 10
+
+$task = Get-ScheduledTask -TaskName $TaskName
+$state = if ($task.State -eq 'Running') { 'STARTED' } else { 'FAILED' }
+Write-Output ('RESULT={0};STATE={1};UPDATE={2};SIZEMB={3}' -f $state, $task.State, $found.Title, [int]($found.MaxDownloadSize / 1MB))
+'@
+        }
+
         'Status' {
             return @'
 param([string]$TaskName)
@@ -252,7 +337,7 @@ foreach ($root in $roots) {
     if (-not (Test-Path -LiteralPath $root)) { continue }
     $null = $out.AppendLine("ROOT=$root")
 
-    foreach ($logName in 'setuperr.log', 'setupact.log') {
+    foreach ($logName in 'setuperr.log', 'setupact.log', 'feature-update.log') {
         $logPath = Join-Path $root $logName
         if (Test-Path -LiteralPath $logPath) {
             $tail = Get-Content -LiteralPath $logPath -Tail 25

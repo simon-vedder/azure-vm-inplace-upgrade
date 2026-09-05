@@ -29,9 +29,9 @@ $script:State = @{
     Failed          = 'Failed'
 }
 
-# Engines the module can actually drive today. The matrix may list more (FeatureUpdate is
-# experimental); the preflight only ever selects from this list.
-$script:ImplementedEngines = @('MediaDisk')
+# Engines the module can drive. MediaDisk is the default and the only one without a network
+# dependency; FeatureUpdate needs Windows Update reachability and is chosen explicitly (ADR 0006).
+$script:ImplementedEngines = @('MediaDisk', 'FeatureUpdate')
 
 foreach ($folder in 'Private', 'Public') {
     foreach ($file in Get-ChildItem -Path (Join-Path $PSScriptRoot $folder) -Filter '*.ps1' -File) {

@@ -41,6 +41,9 @@ it; Check mode ignores it.
 Check mode: how old UpgradeStartedAt may be before a VM that has not reached the target build is
 declared Failed.
 
+.PARAMETER Engine
+Start mode: MediaDisk (default) or FeatureUpdate (experimental, Windows Update based, WS2019/2022 only).
+
 .PARAMETER UseMatrixProductKey
 Start mode: pass the matrix's public KMS client setup key as setup.exe /pkey (fix for 0xC1900215).
 
@@ -114,6 +117,10 @@ param(
     [int]$TimeoutMinutes = 240,
 
     [Parameter()]
+    [ValidateSet('MediaDisk', 'FeatureUpdate')]
+    [string]$Engine = 'MediaDisk',
+
+    [Parameter()]
     [bool]$UseMatrixProductKey = $false,
 
     [Parameter()]
@@ -167,7 +174,7 @@ if ($Mode -eq 'Start') {
         $pending = @(Get-InPlaceUpgradeCandidate @scope -State 'Pending' | Sort-Object Name | Select-Object -First $slots)
         Write-Output "Pending and selected: $(if ($pending.Count) { ($pending.Name -join ', ') } else { 'none' })"
         foreach ($vm in $pending) {
-            $result = Start-InPlaceUpgrade -VM $vm -UseMatrixProductKey:$UseMatrixProductKey -Confirm:$false -WhatIf:$DryRun `
+            $result = Start-InPlaceUpgrade -VM $vm -Engine $Engine -UseMatrixProductKey:$UseMatrixProductKey -Confirm:$false -WhatIf:$DryRun `
                 -LogIngestionEndpoint $LogIngestionEndpoint -DataCollectionRuleId $DataCollectionRuleId
             Write-Output "[$($vm.Name)] $($result.Result): $($result.Reason)"
             Add-Summary $result.Result

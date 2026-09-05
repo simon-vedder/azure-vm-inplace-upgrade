@@ -93,7 +93,7 @@ Describe 'Module' {
         $exported | Should -Be @('Complete-InPlaceUpgrade', 'Get-InPlaceUpgradeCandidate', 'Get-InPlaceUpgradeTarget', 'Invoke-InPlaceUpgrade', 'Start-InPlaceUpgrade', 'Test-InPlaceUpgradeReadiness')
     }
 
-    It 'keeps every guest script free of PowerShell 7 syntax (<_>)' -ForEach @('Facts', 'SetupPath', 'WimImages', 'Launch', 'Status', 'LogTail', 'RemoveTask') {
+    It 'keeps every guest script free of PowerShell 7 syntax (<_>)' -ForEach @('Facts', 'SetupPath', 'WimImages', 'Launch', 'FeatureUpdateLaunch', 'Status', 'LogTail', 'RemoveTask') {
         $script = & $Private.GuestScript -Name $_
         $tokens = $null
         $errors = $null
@@ -142,6 +142,13 @@ Describe 'Target matrix' {
                 $target.ProductKeys.$edition | Should -Match '^([A-Z0-9]{5}-){4}[A-Z0-9]{5}$'
             }
         }
+    }
+
+    It 'carries the search criteria and title prefix for the FeatureUpdate engine' {
+        $fu = ($targets | Where-Object Name -eq 'WS2025').Engines.FeatureUpdate
+        $fu.searchCriteria | Should -Match "DeploymentAction='OptionalInstallation'"
+        $fu.titlePrefix | Should -Be 'Windows Server 2025'
+        $fu.registryOptIn | Should -Match 'AllowWindowsServerFeatureUpdate$'
     }
 
     It 'names the required update for every FeatureUpdate source' {
@@ -638,12 +645,19 @@ Describe 'Readiness rules (Resolve-InPlaceUpgradeReadiness)' {
         $r.Decision | Should -Be 'Eligible'
     }
 
-    It 'fails the engine when the upgrade image is missing in the region' {
+    It 'falls back to FeatureUpdate with a warning when the image is missing and the source supports it' {
         $r = & $Private.Resolve -Target $Target2025 -ArmFacts (New-ArmFacts) -GuestFacts (New-GuestFacts) -Media $MediaMissing
         (Get-Check $r 'MediaImage').Result | Should -Be 'Fail'
+        (Get-Check $r 'Engine').Result | Should -Be 'Warn'
+        $r.Engine | Should -Be 'FeatureUpdate'
+        $r.Decision | Should -Be 'NotEligible'
+    }
+
+    It 'fails the engine when the image is missing and the source has no other engine' {
+        $facts = New-GuestFacts @{ Build = 14393; ProductName = 'Windows Server 2016 Datacenter' }
+        $r = & $Private.Resolve -Target $Target2025 -ArmFacts (New-ArmFacts) -GuestFacts $facts -Media $MediaMissing
         (Get-Check $r 'Engine').Result | Should -Be 'Fail'
         $r.Engine | Should -BeNullOrEmpty
-        $r.Decision | Should -Be 'NotEligible'
     }
 
     It 'surfaces a media lookup error' {

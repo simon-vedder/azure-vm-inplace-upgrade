@@ -149,15 +149,17 @@ function Resolve-InPlaceUpgradeReadiness {
         if ($candidates.Count -eq 0) {
             Add-Check 'Engine' 'Fail' "No implemented engine for this path (listed: $($source.Engines -join ', ')); implemented: $($script:ImplementedEngines -join ', ')."
         }
-        elseif ($candidates -contains 'MediaDisk') {
-            if ($mediaOk -eq $false) {
-                Add-Check 'Engine' 'Fail' 'MediaDisk is the only implemented engine for this path and its upgrade image is unavailable.'
-            }
-            else {
-                $engine = 'MediaDisk'
-                if ($null -eq $mediaOk) { Add-Check 'Engine' 'Warn' 'MediaDisk selected; upgrade image availability was not checked.' }
-                else { Add-Check 'Engine' 'Pass' 'MediaDisk engine selected.' }
-            }
+        elseif ($candidates -contains 'MediaDisk' -and $mediaOk -ne $false) {
+            $engine = 'MediaDisk'
+            if ($null -eq $mediaOk) { Add-Check 'Engine' 'Warn' 'MediaDisk selected; upgrade image availability was not checked.' }
+            else { Add-Check 'Engine' 'Pass' 'MediaDisk engine selected.' }
+        }
+        elseif ($candidates -contains 'FeatureUpdate') {
+            $engine = 'FeatureUpdate'
+            Add-Check 'Engine' 'Warn' 'Upgrade media unavailable; FeatureUpdate selected. Needs Windows Update reachability and the required cumulative update (experimental).'
+        }
+        else {
+            Add-Check 'Engine' 'Fail' 'MediaDisk is the only engine for this path and its upgrade image is unavailable.'
         }
     }
 

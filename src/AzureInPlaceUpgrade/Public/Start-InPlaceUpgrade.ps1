@@ -36,7 +36,10 @@ function Start-InPlaceUpgrade {
     Target key from the matrix, for example WS2025. Defaults to the VM's UpgradeTarget tag.
 
     .PARAMETER Engine
-    Upgrade engine. Only MediaDisk is implemented (ADR 0006).
+    MediaDisk (default): Microsoft's upgrade media as a managed disk, no network needed, every
+    documented source version. FeatureUpdate (experimental): the Windows Server 2025 feature
+    update through the Windows Update Agent, WS2019/WS2022 only, needs Windows Update
+    reachability; no media disk is created (ADR 0006).
 
     .PARAMETER MediaDiskResourceGroupName
     Resource group for the media disk. Defaults to the VM's resource group.
@@ -125,7 +128,7 @@ function Start-InPlaceUpgrade {
         [string]$Target,
 
         [Parameter()]
-        [ValidateSet('MediaDisk')]
+        [ValidateSet('MediaDisk', 'FeatureUpdate')]
         [string]$Engine = 'MediaDisk',
 
         [Parameter()]
@@ -190,7 +193,7 @@ function Start-InPlaceUpgrade {
             $record = ConvertTo-UpgradeRecord -VMName $vmName -ResourceGroupName $rg -State $State -Result $Result -Reason $Reason `
                 -Target $targetName -Engine $Engine -TargetBuild $targetObject.TargetBuild `
                 -SourceBuild $(if ($readiness) { $readiness.SourceBuild } else { $null }) -ImageIndex $ImageIndex `
-                -Snapshot $(if ($snapshotName) { $snapshotName } else { '' }) -MediaDisk $(if ($snapshotName) { "$mediaDiskRg/$mediaDiskName" } else { '' }) -Mode 'Start'
+                -Snapshot $(if ($snapshotName) { $snapshotName } else { '' }) -MediaDisk $(if ($snapshotName -and $Engine -eq 'MediaDisk') { "$mediaDiskRg/$mediaDiskName" } else { '' }) -Mode 'Start'
             $null = Write-UpgradeRecord -Record $record -LogIngestionEndpoint $logEndpoint -DataCollectionRuleId $logRuleId
         }
 
@@ -205,7 +208,7 @@ function Start-InPlaceUpgrade {
                 Result            = $Result
                 Reason            = $Reason
                 Snapshot          = $snapshotName
-                MediaDisk         = if ($snapshotName) { "$mediaDiskRg/$mediaDiskName" } else { $null }
+                MediaDisk         = if ($snapshotName -and $Engine -eq 'MediaDisk') { "$mediaDiskRg/$mediaDiskName" } else { $null }
                 SetupPath         = $setupPath
                 StartedAt         = $startedAt
                 Readiness         = $readiness
@@ -233,6 +236,12 @@ function Start-InPlaceUpgrade {
             }
             Write-Warning "[$vmName] Proceeding despite failed preflight checks (-Force): $failed"
         }
+        elseif ($Engine -eq 'FeatureUpdate') {
+            $source = $targetObject.Sources | Where-Object { $_.Build -eq $readiness.SourceBuild } | Select-Object -First 1
+            if (-not $source -or $source.Engines -notcontains 'FeatureUpdate') {
+                return ConvertTo-StartResult 'NotEligible' "The FeatureUpdate engine is not available for build $($readiness.SourceBuild) to $targetName; use MediaDisk."
+            }
+        }
         elseif ($readiness.Engine -ne $Engine -and -not $Force) {
             return ConvertTo-StartResult 'NotEligible' "The preflight selected engine '$($readiness.Engine)', not '$Engine'."
         }
@@ -247,9 +256,12 @@ function Start-InPlaceUpgrade {
         }
 
         $mediaEngine = Get-PropertyOrDefault -InputObject $targetObject.Engines -Name 'MediaDisk'
-        if (-not $mediaEngine) { throw "Target $targetName has no MediaDisk engine in the matrix." }
+        $featureEngine = Get-PropertyOrDefault -InputObject $targetObject.Engines -Name 'FeatureUpdate'
+        if ($Engine -eq 'MediaDisk' -and -not $mediaEngine) { throw "Target $targetName has no MediaDisk engine in the matrix." }
+        if ($Engine -eq 'FeatureUpdate' -and -not $featureEngine) { throw "Target $targetName has no FeatureUpdate engine in the matrix." }
 
-        $action = "Snapshot the OS disk, attach upgrade media $($mediaEngine.sku) and start Windows Setup to $($targetObject.DisplayName)"
+        $action = if ($Engine -eq 'FeatureUpdate') { "Snapshot the OS disk and start the Windows Update feature update to $($targetObject.DisplayName)" }
+        else { "Snapshot the OS disk, attach upgrade media $($mediaEngine.sku) and start Windows Setup to $($targetObject.DisplayName)" }
         if ($Force) { $ConfirmPreference = 'None' }
         if (-not $PSCmdlet.ShouldProcess($vmName, $action)) {
             return ConvertTo-StartResult 'Skipped' 'WhatIf: preflight passed, nothing changed.'
@@ -276,6 +288,17 @@ function Start-InPlaceUpgrade {
             }
             Set-UpgradeTag -ResourceId $VM.Id -Tag @{ $tagState = $script:State.SnapshotCreated; $tagSnapshot = $snapshotName }
             Write-StartRecord -State $script:State.SnapshotCreated -Result 'SnapshotCreated' -Reason "Snapshot $snapshotName"
+
+            if ($Engine -eq 'FeatureUpdate') {
+                $launch = Start-GuestFeatureUpdate -ResourceGroupName $rg -VMName $vmName -FeatureUpdateEngine $featureEngine
+                if (-not $launch.Started) { throw $launch.Reason }
+                Write-Verbose "[$vmName] $($launch.Reason) $($launch.Raw)"
+
+                $startedAt = (Get-Date).ToUniversalTime()
+                Set-UpgradeTag -ResourceId $VM.Id -Tag @{ $tagState = $script:State.UpgradeStarted; $tagStartedAt = (ConvertTo-TagTimestamp -Value $startedAt) }
+                Write-StartRecord -State $script:State.UpgradeStarted -Result 'Started' -Reason $launch.Reason
+                return ConvertTo-StartResult 'Started' $launch.Reason
+            }
 
             $disk = New-UpgradeMediaDisk -VM $VM -DiskName $mediaDiskName -DiskResourceGroupName $mediaDiskRg -MediaEngine $mediaEngine -SkuName $MediaDiskSkuName
             Set-UpgradeTag -ResourceId $VM.Id -Tag @{ $tagMediaDisk = "$mediaDiskRg/$mediaDiskName" }
@@ -324,7 +347,7 @@ function Start-InPlaceUpgrade {
             catch { Write-Warning "[$vmName] Could not set $tagState=Failed: $($_.Exception.Message)" }
             Write-StartRecord -State $script:State.Failed -Result 'Failed' -Reason $reason
 
-            if (-not $KeepMediaDisk) {
+            if (-not $KeepMediaDisk -and $Engine -eq 'MediaDisk') {
                 $cleanup = Remove-UpgradeMediaDisk -ResourceGroupName $rg -VMName $vmName -DiskResourceGroupName $mediaDiskRg -DiskName $mediaDiskName
                 if (-not $cleanup.Removed) { Write-Warning "[$vmName] Media disk cleanup failed: $($cleanup.Error)" }
             }
