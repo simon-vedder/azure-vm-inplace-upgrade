@@ -26,7 +26,11 @@ All notable changes to this project are documented here. The format follows
 - `src/runbooks/Invoke-InPlaceUpgradeRunbook.ps1`: thin Azure Automation wrapper with Start and
   Check modes, ring filter and a parallelism limit that counts VMs already in progress.
 - `deploy/main.bicep`: subscription-scope deployment of Automation Account, identity, custom
-  operator role, Log Analytics, pinned module imports, runbook and schedules.
+  operator role, Log Analytics, module import, runbook and schedules.
+- Telemetry: `InPlaceUpgrade_CL` custom table, data collection endpoint and rule, workbook
+  *In-place upgrades*; one record per state transition from Start and Complete.
+- Release workflow: tag `v*` runs analyzer and tests, publishes to the PowerShell Gallery and
+  attaches the module zip and runbook to the GitHub release.
 - Image index detection: the media's `install.wim` is listed in the guest and the image matching
   the guest's edition and installation type is passed as `/installfrom` + `/imageindex`.
 - Completion rules isolated in a pure function; Task Scheduler status codes (0x4130x) are not
