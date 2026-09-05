@@ -34,8 +34,14 @@ until you redeploy with `startScheduleEnabled=true`, and even then only VMs tagg
 `UpgradeState=Pending` are touched.
 
 Tearing down: `az group delete` removes everything in the resource group, but the custom role
-definition lives at subscription scope and stays behind. Remove it with
-`az role definition delete --name "Azure VM In-Place Upgrade Operator"` once no assignment uses it.
+definition lives at subscription scope and stays behind, and so can an orphaned assignment whose
+identity died with the Automation Account. Remove both:
+
+```bash
+role=$(az role definition list --custom-role-only true --query "[?roleName=='Azure VM In-Place Upgrade Operator'].name" -o tsv)
+az role assignment list --all --query "[?contains(roleDefinitionId, '$role')].id" -o tsv | xargs -n1 az role assignment delete --ids
+az role definition delete --name "Azure VM In-Place Upgrade Operator"
+```
 
 Before the first Gallery release, point `modulePackageUri` at a GitHub release asset (a zip of
 `src/AzureInPlaceUpgrade`) and `runbookContentUri` at the raw runbook URL of a tag. When the content
