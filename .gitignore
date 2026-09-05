@@ -1,0 +1,8 @@
+.DS_Store
+TestResults.xml
+*.nupkg
+dist/
+deploy/**/*.local.*
+deploy/**/*.bicepparam
+!deploy/**/example.bicepparam
+lab/**/*.local.*
