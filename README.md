@@ -131,6 +131,17 @@ The first job attempt died at `Import-Module Az.Accounts` because the deployment
 newer Az.Accounts next to the runtime's global bundle; the deployment now imports only this
 module (see [KNOWN-ISSUES.md](KNOWN-ISSUES.md)).
 
+## Observability
+
+With the Bicep deployment, every state transition becomes one row in the Log Analytics table
+`InPlaceUpgrade_CL`, written by the module through the Logs Ingestion API (data collection
+endpoint and rule, identity with *Monitoring Metrics Publisher*): VM, target, state, result,
+reason, engine, builds, image index, duration, Setup task result, snapshot and media disk names,
+job id, and the Setup log excerpt on failure. The workbook *In-place upgrades* shows VMs by
+state, the latest record per VM, failures with their reasons, completed upgrades with durations
+and activity over time. Locally, pass `-LogIngestionEndpoint` and `-DataCollectionRuleId` to
+`Start`, `Complete` or `Invoke`; without them nothing is sent anywhere.
+
 ## Tags
 
 | Tag | Values | Meaning |
@@ -262,7 +273,7 @@ tests/                       Pester
 4. ✅ Runbook wrapper, `Start` / `Check` modes.
 5. ✅ Bicep: Automation Account, custom role, module import, schedules; deployed and driven end to end in the lab.
 6. FeatureUpdate spike.
-7. Log Analytics table + workbook; Deploy-to-Azure button.
+7. ✅ Log Analytics table + workbook (deployed; first records under verification). Deploy-to-Azure button pending.
 8. Lab: 2019 → 2025, 2012 R2 → 2025, the 2022 and 2019 targets, Trusted Launch.
 9. PowerShell Gallery release.
 

@@ -89,6 +89,14 @@ documented by Microsoft. Each entry says which. "To verify" means it is on the l
   `AzureInPlaceUpgrade`; its manifest minimums are the runtime defaults (Az.Accounts 2.15.0,
   Az.Compute 7.1.1, Az.Resources 6.13.0). Runtime environments with a pinned Az version are the
   clean way out once they leave preview.
+- **Automation only re-imports a module or re-publishes a runbook when the content link's
+  `version` changes.** *(observed, 2026-09-05)* A redeploy with a changed package behind the same
+  URI was a silent no-op; the runbook kept its old parameters and `Start-AzAutomationRunbook`
+  answered "Invalid runbook parameters". The Bicep stamps `contentVersion` on both links; it must
+  look like a `System.Version` (`0.2.0.7`), a pre-release suffix is rejected.
+- **Job schedules are immutable once linked.** *(observed)* Changing their parameters in the
+  template does nothing. Anything that may change later (the telemetry target) is an Automation
+  variable the runbook reads, not a job parameter.
 - **Azure Automation cloud jobs are cancelled after 3 hours (fair share).** *(Microsoft)* Hence the
   `Start` / `Check` split; `Full` mode is for local runs and Hybrid Runbook Workers only.
 - **ARM metadata never changes after an in-place upgrade.** *(Microsoft)* `imageReference` still
@@ -133,8 +141,13 @@ documented by Microsoft. Each entry says which. "To verify" means it is on the l
 - Available since spring 2026, requires the March 2026 cumulative update and the
   `AllowWindowsServerFeatureUpdate` registry opt-in. *(Microsoft)*
 - **Microsoft's announcement says an administrator must click *Download and install*.**
-  Whether it can be triggered unattended from a scheduled task is *to verify*. Until then, the
-  `FeatureUpdate` engine is listed in the matrix as experimental and not implemented.
+  *(observed, 2026-09-05)* The click is not required. A plain `IsInstalled=0` search of the Windows
+  Update Agent does not return the feature update, but
+  `IsInstalled=0 and DeploymentAction='OptionalInstallation'` returns **Windows Server 2025**
+  (category Upgrades, `EulaAccepted=True`, `CanRequestUserInput=False`, reboot required) once the
+  opt-in key is set and the March 2026 CU or later is installed. `Microsoft.Update.Session` can
+  download and install it from a SYSTEM scheduled task. Result of the install is on the lab list;
+  the `FeatureUpdate` engine stays experimental until it is.
 
 ## Rollback
 
