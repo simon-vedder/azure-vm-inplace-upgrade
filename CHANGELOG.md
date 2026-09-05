@@ -33,6 +33,9 @@ All notable changes to this project are documented here. The format follows
   treated as Setup failures.
 
 ### Verified
+- 2026-09-05: **Windows Server 2022 Datacenter Core → 2025 Core** (23 min, image index 3 picked
+  automatically) and **Windows Server 2016 Datacenter → 2025** (42 min, index 4), run in
+  parallel on two lab VMs. `targets.json` marks 14393 → 26100 as verified.
 - 2026-09-05: **Windows Server 2022 Datacenter → 2025 end to end** on a `2022-datacenter-g2`
   Marketplace VM with `Invoke-InPlaceUpgrade`: 37 minutes from Setup start to build 26100,
   snapshot reused from the previous attempt, media disk deleted, scheduled task removed. Two

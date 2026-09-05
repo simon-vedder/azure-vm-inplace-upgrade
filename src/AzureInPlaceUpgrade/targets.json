@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "notes": [
     "Only source/target pairs that Microsoft documents as supported in-place upgrade paths for Azure VMs are listed.",
-    "verified=true means the path ran end to end in this project's lab with the MediaDisk engine. false means documented by Microsoft, not yet exercised here. Flip it only with a lab run in the pull request. Verified so far: 20348 -> 26100 on 2026-09-05 (2022-datacenter-g2, B2ms, westeurope, 37 minutes from Setup start to build 26100).",
+    "verified=true means the path ran end to end in this project's lab with the MediaDisk engine. false means documented by Microsoft, not yet exercised here. Flip it only with a lab run in the pull request. Verified so far (2026-09-05, B2ms, westeurope, MediaDisk engine): 20348 -> 26100 Desktop Experience in 37 min and Server Core in 23 min; 14393 -> 26100 Desktop Experience in 42 min.",
     "productKeys are Microsoft's public KMS client setup keys (GVLK) for the TARGET version. They are handed to setup.exe /pkey only when Setup cannot resolve the edition against the multi-edition install.wim (HRESULT 0xC1900215). They activate nothing.",
     "architecture uses the Win32_OperatingSystem.OSArchitecture spelling because that is what the guest probe reports."
   ],
@@ -12,7 +12,7 @@
       "targetBuild": 26100,
       "sources": [
         { "build": 9600,  "name": "Windows Server 2012 R2", "engines": [ "MediaDisk" ],                  "verified": false },
-        { "build": 14393, "name": "Windows Server 2016",    "engines": [ "MediaDisk" ],                  "verified": false },
+        { "build": 14393, "name": "Windows Server 2016",    "engines": [ "MediaDisk" ],                  "verified": true },
         { "build": 17763, "name": "Windows Server 2019",    "engines": [ "MediaDisk", "FeatureUpdate" ], "verified": false },
         { "build": 20348, "name": "Windows Server 2022",    "engines": [ "MediaDisk", "FeatureUpdate" ], "verified": true }
       ],

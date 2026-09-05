@@ -12,10 +12,10 @@ the build inside the guest and cleans up. Windows Server 2012 R2, 2016, 2019 and
 using the upgrade media Microsoft ships as a hidden Marketplace image.
 
 > **Status: pre-release.** Preflight, Start, Complete, the runbook wrapper and the Bicep
-> deployment exist. One path is lab-verified end to end: Windows Server 2022 Datacenter to 2025
-> on a Marketplace VM, 37 minutes from Setup start to build 26100. Everything else in the matrix
-> is documented by Microsoft and not yet exercised here. See [Verified](#verified) and
-> [Roadmap](#roadmap).
+> deployment exist. Lab-verified end to end on Marketplace VMs: Windows Server 2022 Datacenter
+> to 2025 (Desktop Experience and Server Core) and Windows Server 2016 Datacenter to 2025.
+> 2012 R2 and 2019 sources, and the 2022 and 2019 targets, are documented by Microsoft and not
+> yet exercised here. See [Verified](#verified) and [Roadmap](#roadmap).
 
 ## Read this first
 
@@ -144,7 +144,7 @@ A tag value that is not a key here never reaches an Azure image.
 
 | Target | Sources (build) | Engines | Verified in this project |
 |---|---|---|---|
-| `WS2025` | 2012 R2 (9600), 2016 (14393), 2019 (17763), 2022 (20348) | MediaDisk; FeatureUpdate for 2019/2022 (experimental) | **2022 → 2025 ✅ 2026-09-05**; others not yet |
+| `WS2025` | 2012 R2 (9600), 2016 (14393), 2019 (17763), 2022 (20348) | MediaDisk; FeatureUpdate for 2019/2022 (experimental) | **2022 ✅ (Desktop Experience and Core), 2016 ✅** 2026-09-05; 2012 R2 and 2019 not yet |
 | `WS2022` | 2016 (14393), 2019 (17763) | MediaDisk | not yet |
 | `WS2019` | 2012 R2 (9600), 2016 (14393) | MediaDisk | not yet |
 
@@ -160,8 +160,22 @@ it is listed as experimental until a lab spike shows it can be triggered without
 
 ## Verified
 
-Lab run of 2026-09-05, `Invoke-InPlaceUpgrade` against a fresh `2022-datacenter-g2` Marketplace
-VM (Standard_B2ms, westeurope, no public IP, `deploy/lab.bicep`):
+Three lab runs on 2026-09-05 with `Invoke-InPlaceUpgrade`, fresh Marketplace VMs from
+`deploy/lab.bicep` (Standard_B2ms, westeurope, no public IP), MediaDisk engine, no `/pkey`:
+
+| Source image | Image picked | Setup start → build 26100 | Result |
+|---|---|---|---|
+| `2022-datacenter-g2` | 4, Datacenter (Desktop Experience) | 37 min | Completed, Desktop Experience kept |
+| `2022-datacenter-core-g2` | 3, Datacenter (Core) | 23 min | Completed, still Server Core, no `explorer.exe` |
+| `2016-datacenter-gensecond` | 4, Datacenter (Desktop Experience) | 42 min | Completed, 24H2 |
+
+The 2016 guest's older DISM reports the image name as `Windows Server 2025 SERVERDATACENTER`
+instead of `Datacenter (Desktop Experience)`; the selection matches `EditionId` and
+`InstallationType`, never names, so it still picked index 4. The media disk came up as `E:` on
+2022 and `F:` on 2016, which is why the module searches for `setup.exe` instead of assuming a
+letter. The Core and 2016 runs ran at the same time, each with its own media disk.
+
+Timeline of the first 2022 run:
 
 | Step | Duration |
 |---|---|
@@ -236,12 +250,12 @@ tests/                       Pester
    `Test-InPlaceUpgradeReadiness`, Pester for every rule.
 2. ✅ Lab: preflight against a 2022 guest (2016 and 2019 pending).
 3. ✅ `Start-InPlaceUpgrade` / `Complete-InPlaceUpgrade` / `Invoke-InPlaceUpgrade` with the
-   MediaDisk engine; 2022 → 2025 verified in the lab.
+   MediaDisk engine; 2022 → 2025 (Desktop Experience and Core) and 2016 → 2025 verified in the lab.
 4. ✅ Runbook wrapper, `Start` / `Check` modes.
 5. ✅ Bicep: Automation Account, custom role, module import, schedules (written, not yet deployed in the lab).
 6. FeatureUpdate spike.
 7. Log Analytics table + workbook; Deploy-to-Azure button.
-8. Lab: 2016 → 2025, 2019 → 2025, Server Core.
+8. Lab: 2019 → 2025, 2012 R2 → 2025, the 2022 and 2019 targets, Trusted Launch.
 9. PowerShell Gallery release.
 
 ## Contributing and security

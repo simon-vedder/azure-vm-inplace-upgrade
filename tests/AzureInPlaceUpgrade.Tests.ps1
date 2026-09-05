@@ -495,7 +495,7 @@ Describe 'Readiness rules (Resolve-InPlaceUpgradeReadiness)' {
     }
 
     It 'says so when a documented path has not been verified here yet' {
-        $r = & $Private.Resolve -Target $Target2025 -ArmFacts (New-ArmFacts) -GuestFacts (New-GuestFacts @{ Build = 14393; ProductName = 'Windows Server 2016 Datacenter' }) -Media $MediaPresent
+        $r = & $Private.Resolve -Target $Target2025 -ArmFacts (New-ArmFacts) -GuestFacts (New-GuestFacts @{ Build = 17763; ProductName = 'Windows Server 2019 Datacenter' }) -Media $MediaPresent
         (Get-Check $r 'SourceBuild').Result | Should -Be 'Pass'
         (Get-Check $r 'SourceBuild').Detail | Should -Match 'not yet verified'
     }

@@ -59,6 +59,16 @@ documented by Microsoft. Each entry says which. "To verify" means it is on the l
   media-disk engine. *(Microsoft)* `ping` proves nothing either way.
 - **`TargetImageIndex` is media-dependent.** *(observed)* An index that is right for one media
   version can be wrong for another. Never assume it globally; detect it.
+- **Older DISM reports different image names.** *(observed, 2026-09-05)* On a Windows Server
+  2016 guest `Get-WindowsImage` calls image 4 `Windows Server 2025 SERVERDATACENTER`; on 2022 it
+  is `Windows Server 2025 Datacenter (Desktop Experience)`. `EditionId` and `InstallationType`
+  are stable across DISM versions, names are not. The module matches metadata only.
+- **The media disk's drive letter varies.** *(observed)* `E:` on a 2022 guest, `F:` on a 2016
+  guest with a temporary disk on `E:`. The module searches every non-system volume.
+- **The scheduled task may not survive a multi-version upgrade.** *(observed, 2016 → 2025)*
+  After the upgrade the guest reported no task at all (state `None`, no result). Completion is
+  decided on the build number, so this changes nothing; the cleanup step simply finds nothing to
+  remove.
 
 ## Azure
 
