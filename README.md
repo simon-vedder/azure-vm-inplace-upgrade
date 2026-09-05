@@ -120,8 +120,16 @@ Setup, activation channel, and whether the upgrade media image exists in the VM'
 identity, discover by tag, apply `-Ring` and `-MaxParallel`, call the module per VM. Two
 schedules: `-Mode Start` once per maintenance window, `-Mode Check` every 20 to 30 minutes.
 `-MaxParallel` counts the VMs already in `UpgradeStarted`, so a Start job never exceeds it.
-`deploy/main.bicep` creates the account, identity, least-privilege role, module imports and
+`deploy/main.bicep` creates the account, identity, least-privilege role, module import and
 schedules; see [deploy/README.md](deploy/README.md).
+
+Verified 2026-09-05 in the lab, end to end through Automation: `main.bicep` deployed in three
+minutes; a manually started `Start` job found the `Ring0` VM, ran the preflight, snapshot, media
+disk and Setup launch in four minutes; the scheduled `Check` job reported `InProgress` twice and
+set `Completed` on its third run, 43 minutes after Setup started, with the media disk removed.
+The first job attempt died at `Import-Module Az.Accounts` because the deployment had imported a
+newer Az.Accounts next to the runtime's global bundle; the deployment now imports only this
+module (see [KNOWN-ISSUES.md](KNOWN-ISSUES.md)).
 
 ## Tags
 
@@ -252,7 +260,7 @@ tests/                       Pester
 3. ✅ `Start-InPlaceUpgrade` / `Complete-InPlaceUpgrade` / `Invoke-InPlaceUpgrade` with the
    MediaDisk engine; 2022 → 2025 (Desktop Experience and Core) and 2016 → 2025 verified in the lab.
 4. ✅ Runbook wrapper, `Start` / `Check` modes.
-5. ✅ Bicep: Automation Account, custom role, module import, schedules (written, not yet deployed in the lab).
+5. ✅ Bicep: Automation Account, custom role, module import, schedules; deployed and driven end to end in the lab.
 6. FeatureUpdate spike.
 7. Log Analytics table + workbook; Deploy-to-Azure button.
 8. Lab: 2019 → 2025, 2012 R2 → 2025, the 2022 and 2019 targets, Trusted Launch.

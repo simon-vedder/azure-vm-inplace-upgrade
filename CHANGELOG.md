@@ -33,6 +33,12 @@ All notable changes to this project are documented here. The format follows
   treated as Setup failures.
 
 ### Verified
+- 2026-09-05: **Azure Automation path end to end.** `deploy/main.bicep` deployed at subscription
+  scope (custom role, assignment on the VM resource group, Automation Account with the module
+  imported from a package URI, PowerShell 7.2 runbook, schedules). A `Start` job launched the
+  upgrade of a tagged `Ring0` VM in four minutes; scheduled `Check` jobs every 15 minutes moved
+  it to `Completed` 43 minutes later. Found and fixed: importing a newer Az.Accounts next to the
+  runtime's global Az bundle breaks every job; the deployment imports only this module.
 - 2026-09-05: **Windows Server 2022 Datacenter Core → 2025 Core** (23 min, image index 3 picked
   automatically) and **Windows Server 2016 Datacenter → 2025** (42 min, index 4), run in
   parallel on two lab VMs. `targets.json` marks 14393 → 26100 as verified.
