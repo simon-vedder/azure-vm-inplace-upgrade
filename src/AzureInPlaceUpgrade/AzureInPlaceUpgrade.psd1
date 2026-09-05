@@ -8,10 +8,13 @@
     Copyright            = '(c) 2026 Simon Vedder. MIT License.'
     Description          = 'Tag-driven, unattended in-place Windows Server upgrades for Azure VMs: preflight, OS disk snapshot, detached Windows Setup, state tracking across Azure Automation jobs and in-guest validation.'
     PowerShellVersion    = '7.2'
+    # Minimums match the Az bundle the Azure Automation PowerShell 7.2 runtime ships by default
+    # (Az 11.2.0). Importing newer Az.Accounts into an Automation Account next to the default one
+    # breaks assembly loading; the deployment therefore imports no Az modules at all.
     RequiredModules      = @(
-        @{ ModuleName = 'Az.Accounts'; ModuleVersion = '2.19.0' }
-        @{ ModuleName = 'Az.Compute'; ModuleVersion = '7.1.0' }
-        @{ ModuleName = 'Az.Resources'; ModuleVersion = '6.16.0' }
+        @{ ModuleName = 'Az.Accounts'; ModuleVersion = '2.15.0' }
+        @{ ModuleName = 'Az.Compute'; ModuleVersion = '7.1.1' }
+        @{ ModuleName = 'Az.Resources'; ModuleVersion = '6.13.0' }
     )
     FunctionsToExport    = @(
         'Complete-InPlaceUpgrade'

@@ -82,6 +82,13 @@ documented by Microsoft. Each entry says which. "To verify" means it is on the l
 
 - **Run Command dies with the first reboot and is capped at 90 minutes.** *(Microsoft)* Setup is
   never run synchronously; it runs from a scheduled task as SYSTEM with no execution time limit.
+- **Do not import a newer Az.Accounts into the Automation Account.** *(observed, 2026-09-05)*
+  The PowerShell 7.2 runtime ships a global Az 11.2.0 bundle. Importing Az.Accounts 5.5.3 next to
+  it made every job die at `Import-Module Az.Accounts` with "Unable to find type
+  AzAssemblyLoadContextInitializer" and a missing MSAL assembly. The deployment imports only
+  `AzureInPlaceUpgrade`; its manifest minimums are the runtime defaults (Az.Accounts 2.15.0,
+  Az.Compute 7.1.1, Az.Resources 6.13.0). Runtime environments with a pinned Az version are the
+  clean way out once they leave preview.
 - **Azure Automation cloud jobs are cancelled after 3 hours (fair share).** *(Microsoft)* Hence the
   `Start` / `Check` split; `Full` mode is for local runs and Hybrid Runbook Workers only.
 - **ARM metadata never changes after an in-place upgrade.** *(Microsoft)* `imageReference` still

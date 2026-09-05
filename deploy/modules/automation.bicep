@@ -23,14 +23,6 @@ param startScheduleTime string
 param startScheduleEnabled bool
 param scheduleTimeZone string
 
-// Az versions the module was tested with. Az.Compute and Az.Resources require Az.Accounts of at
-// least this version; keep the three in step when bumping.
-var azModules = [
-  { name: 'Az.Accounts', version: '5.5.3' }
-  { name: 'Az.Compute', version: '11.9.0' }
-  { name: 'Az.Resources', version: '10.2.0' }
-]
-
 resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   name: logAnalyticsWorkspaceName
   location: location
@@ -84,34 +76,11 @@ resource diagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' 
   }
 }
 
-// Az.Accounts first: the other two declare it as a dependency and the import fails without it.
-resource azAccounts 'Microsoft.Automation/automationAccounts/powershell72Modules@2023-11-01' = {
-  parent: automationAccount
-  name: azModules[0].name
-  properties: {
-    contentLink: {
-      uri: 'https://www.powershellgallery.com/api/v2/package/${azModules[0].name}/${azModules[0].version}'
-      version: azModules[0].version
-    }
-  }
-}
-
-resource azOthers 'Microsoft.Automation/automationAccounts/powershell72Modules@2023-11-01' = [
-  for m in skip(azModules, 1): {
-    parent: automationAccount
-    name: m.name
-    properties: {
-      contentLink: {
-        uri: 'https://www.powershellgallery.com/api/v2/package/${m.name}/${m.version}'
-        version: m.version
-      }
-    }
-    dependsOn: [
-      azAccounts
-    ]
-  }
-]
-
+// No Az module imports on purpose. The PowerShell 7.2 runtime ships a global Az bundle
+// (11.2.0 at the time of writing: Az.Accounts 2.15.0, Az.Compute 7.1.1, Az.Resources 6.13.0).
+// Importing a newer Az.Accounts next to it broke assembly loading in the sandbox
+// ("Unable to find type AzAssemblyLoadContextInitializer", MSAL assembly not found) - observed
+// 2026-09-05. The module's manifest minimums match the runtime defaults instead.
 resource upgradeModule 'Microsoft.Automation/automationAccounts/powershell72Modules@2023-11-01' = {
   parent: automationAccount
   name: 'AzureInPlaceUpgrade'
@@ -120,9 +89,6 @@ resource upgradeModule 'Microsoft.Automation/automationAccounts/powershell72Modu
       uri: modulePackageUri
     }
   }
-  dependsOn: [
-    azOthers
-  ]
 }
 
 resource runbook 'Microsoft.Automation/automationAccounts/runbooks@2023-11-01' = {

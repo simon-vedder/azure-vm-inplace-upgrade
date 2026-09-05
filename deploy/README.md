@@ -19,7 +19,7 @@ What it creates:
 | Resource group `rg-inplaceupgrade-weu` | everything below |
 | Automation Account, system-assigned identity, local auth disabled | runs the runbook |
 | Log Analytics workspace + diagnostic settings | job logs and streams |
-| Modules `Az.Accounts`, `Az.Compute`, `Az.Resources`, `AzureInPlaceUpgrade` (PowerShell 7.2 runtime) | pinned versions from the Gallery |
+| Module `AzureInPlaceUpgrade` (PowerShell 7.2 runtime, uses the runtime's global Az bundle) | the engine |
 | Runbook `Invoke-InPlaceUpgradeRunbook` (PowerShell 7.2) | the thin wrapper from `src/runbooks/` |
 | Schedule `inplaceupgrade-check`, every 20 minutes, linked | finishes running upgrades |
 | Schedule `inplaceupgrade-start`, daily, **not linked** unless `startScheduleEnabled=true` | starts approved upgrades |
