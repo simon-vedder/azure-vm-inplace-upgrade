@@ -1,12 +1,14 @@
-# AzureInPlaceUpgrade
+<p align="center"><img src="docs/images/hero.png" alt="AzureInPlaceUpgrade: unattended, tag-driven in-place upgrades of Windows Server on Azure VMs" width="100%"></p>
+
+<p align="center">
+  <a href="https://github.com/simon-vedder/azure-vm-inplace-upgrade/actions/workflows/ci.yml"><img src="https://github.com/simon-vedder/azure-vm-inplace-upgrade/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://www.powershellgallery.com/packages/AzureInPlaceUpgrade"><img src="https://img.shields.io/powershellgallery/v/AzureInPlaceUpgrade?include_prereleases&label=PowerShell%20Gallery" alt="PowerShell Gallery"></a>
+  <img src="https://img.shields.io/badge/PowerShell-7.2%2B-5391FE?logo=powershell&logoColor=white" alt="PowerShell 7.2+">
+  <img src="https://img.shields.io/badge/Azure-Automation-0078D4?logo=microsoftazure&logoColor=white" alt="Azure Automation">
+  <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT">
+</p>
 
 **Unattended, tag-driven in-place upgrades of Windows Server on Azure VMs.**
-
-[![CI](https://github.com/simon-vedder/azure-vm-inplace-upgrade/actions/workflows/ci.yml/badge.svg)](https://github.com/simon-vedder/azure-vm-inplace-upgrade/actions/workflows/ci.yml)
-[![PowerShell Gallery](https://img.shields.io/powershellgallery/v/AzureInPlaceUpgrade?include_prereleases&label=PowerShell%20Gallery)](https://www.powershellgallery.com/packages/AzureInPlaceUpgrade)
-![PowerShell 7.2+](https://img.shields.io/badge/PowerShell-7.2%2B-5391FE?logo=powershell&logoColor=white)
-![Azure Automation](https://img.shields.io/badge/Azure-Automation-0078D4?logo=microsoftazure&logoColor=white)
-![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
 
 Tag a VM, and AzureInPlaceUpgrade takes it from Windows Server 2016, 2019 or 2022 to Windows
 Server 2025 without anyone logging on: read-only preflight, OS disk snapshot, Microsoft's upgrade
