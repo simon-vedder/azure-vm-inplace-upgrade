@@ -14,6 +14,11 @@ BeforeAll {
             ArmFacts     = Get-Command Get-VMArmFacts
             CandidateTag = Get-Command Test-CandidateTag
             TagValue     = Get-Command Get-VMTagValue
+            GuestResult  = Get-Command ConvertFrom-GuestResult
+            HideKey      = Get-Command Hide-ProductKey
+            MediaName    = Get-Command Get-UpgradeMediaDiskName
+            Completion   = Get-Command Resolve-UpgradeCompletion
+            GuestScript  = Get-Command Get-GuestScript
         }
     }
 
@@ -79,18 +84,19 @@ Describe 'Module' {
 
     It 'exports exactly the public functions' {
         $exported = @((Get-Module AzureInPlaceUpgrade).ExportedFunctions.Keys | Sort-Object)
-        $exported | Should -Be @('Get-InPlaceUpgradeCandidate', 'Get-InPlaceUpgradeTarget', 'Test-InPlaceUpgradeReadiness')
+        $exported | Should -Be @('Complete-InPlaceUpgrade', 'Get-InPlaceUpgradeCandidate', 'Get-InPlaceUpgradeTarget', 'Invoke-InPlaceUpgrade', 'Start-InPlaceUpgrade', 'Test-InPlaceUpgradeReadiness')
     }
 
-    It 'keeps the guest probe free of PowerShell 7 syntax' {
-        $probe = & $module { Get-GuestFactsScript }
+    It 'keeps every guest script free of PowerShell 7 syntax (<_>)' -ForEach @('Facts', 'SetupPath', 'Launch', 'Status', 'LogTail', 'RemoveTask') {
+        $script = & $Private.GuestScript -Name $_
         $tokens = $null
         $errors = $null
-        $null = [System.Management.Automation.Language.Parser]::ParseInput($probe, [ref]$tokens, [ref]$errors)
+        $null = [System.Management.Automation.Language.Parser]::ParseInput($script, [ref]$tokens, [ref]$errors)
         $errors | Should -BeNullOrEmpty
-        $probe | Should -Not -Match '\?\?'          # null-coalescing
-        $probe | Should -Not -Match '\?\.'          # null-conditional
-        $probe | Should -Not -Match '\s\?\s.*\s:\s' # ternary
+        $script | Should -Not -Match '\?\?'          # null-coalescing
+        $script | Should -Not -Match '\?\.'          # null-conditional
+        $script | Should -Not -Match '\s\?\s.*\s:\s' # ternary
+        $script | Should -Not -Match '&&|\|\|'       # pipeline chain operators
     }
 }
 
@@ -250,6 +256,106 @@ Describe 'Get-InPlaceUpgradeCandidate (Get-AzVM mocked)' {
     It 'refuses -IgnoreTags without -Name and -Name without a resource group' {
         { Get-InPlaceUpgradeCandidate -IgnoreTags } | Should -Throw '*only allowed together with -Name*'
         { Get-InPlaceUpgradeCandidate -Name 'vm-x' } | Should -Throw '*requires -ResourceGroupName*'
+    }
+}
+
+Describe 'Guest result parsing (ConvertFrom-GuestResult)' {
+    It 'parses RESULT=OK;SETUP=path' {
+        $r = & $Private.GuestResult -Output "noise`nRESULT=OK;SETUP=F:\\WindowsServer2025\\setup.exe"
+        $r.Result | Should -Be 'OK'
+        $r.Values['SETUP'] | Should -Be 'F:\\WindowsServer2025\\setup.exe'
+    }
+
+    It 'parses a NOTFOUND diagnostic with pipe-separated listing' {
+        $r = & $Private.GuestResult -Output 'RESULT=NOTFOUND;DISKS=#0:Online:GPT,#1:Online:MBR;LISTING=D[Temp]:a,b|E[Media]:x'
+        $r.Result | Should -Be 'NOTFOUND'
+        $r.Values['LISTING'] | Should -Be 'D[Temp]:a,b|E[Media]:x'
+        $r.Raw | Should -Match '^RESULT=NOTFOUND'
+    }
+
+    It 'returns null without a RESULT line' {
+        & $Private.GuestResult -Output 'just text' | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Helpers' {
+    It 'masks a product key in setup arguments' {
+        & $Private.HideKey -Text '/auto upgrade /pkey D764K-2NDRG-47T6Q-P8T8W-YP6DF /quiet' | Should -Be '/auto upgrade /pkey ***** /quiet'
+        & $Private.HideKey -Text '/auto upgrade /quiet' | Should -Be '/auto upgrade /quiet'
+    }
+
+    It 'derives a stable media disk name' {
+        & $Private.MediaName -VMName 'vm-a' -Target 'WS2025' | Should -Be 'vm-a-upgrademedia-ws2025'
+    }
+}
+
+Describe 'Completion rules (Resolve-UpgradeCompletion)' {
+    BeforeAll {
+        $now = [datetime]::new(2026, 9, 5, 12, 0, 0, [System.DateTimeKind]::Utc)
+        $fresh = $now.AddMinutes(-30)
+        $stale = $now.AddMinutes(-300)
+        function New-Status {
+            param([hashtable]$Override = @{})
+            $s = @{ Build = 20348; ProductName = 'Windows Server 2022 Datacenter'; DisplayVersion = '21H2'; SetupRunning = $false; TaskState = 'Ready'; TaskResult = [uint32]0 }
+            foreach ($k in $Override.Keys) { $s[$k] = $Override[$k] }
+            [pscustomobject]$s
+        }
+    }
+
+    It 'is Completed when the guest reports the target build' {
+        $d = & $Private.Completion -Target $Target2025 -PowerState running -Status (New-Status @{ Build = 26100; ProductName = 'Windows Server 2025 Datacenter' }) -StartedAt $fresh -Now $now
+        $d.Result | Should -Be 'Completed'
+        $d.Reason | Should -Match '26100'
+    }
+
+    It 'fails a stopped or deallocated VM' {
+        (& $Private.Completion -Target $Target2025 -PowerState deallocated -Status $null -StartedAt $fresh -Now $now).Result | Should -Be 'Failed'
+        (& $Private.Completion -Target $Target2025 -PowerState stopped -Status $null -StartedAt $fresh -Now $now).Result | Should -Be 'Failed'
+    }
+
+    It 'treats an unreachable guest as rebooting until the timeout' {
+        (& $Private.Completion -Target $Target2025 -PowerState running -Status $null -StartedAt $fresh -Now $now).Result | Should -Be 'InProgress'
+        $d = & $Private.Completion -Target $Target2025 -PowerState running -Status $null -StartedAt $stale -Now $now
+        $d.Result | Should -Be 'Failed'
+        $d.Expired | Should -BeTrue
+        $d.AgeMinutes | Should -Be 300
+    }
+
+    It 'keeps waiting while Setup runs, until the timeout' {
+        (& $Private.Completion -Target $Target2025 -PowerState running -Status (New-Status @{ SetupRunning = $true }) -StartedAt $fresh -Now $now).Result | Should -Be 'InProgress'
+        (& $Private.Completion -Target $Target2025 -PowerState running -Status (New-Status @{ TaskState = 'Running' }) -StartedAt $fresh -Now $now).Result | Should -Be 'InProgress'
+        (& $Private.Completion -Target $Target2025 -PowerState running -Status (New-Status @{ SetupRunning = $true }) -StartedAt $stale -Now $now).Result | Should -Be 'Failed'
+    }
+
+    It 'fails on a Setup HRESULT and flags the task failure' {
+        $d = & $Private.Completion -Target $Target2025 -PowerState running -Status (New-Status @{ TaskResult = [uint32]::Parse('C1900215', [System.Globalization.NumberStyles]::HexNumber) }) -StartedAt $fresh -Now $now
+        $d.Result | Should -Be 'Failed'
+        $d.TaskFailed | Should -BeTrue
+        $d.Reason | Should -Match '0xC1900215'
+    }
+
+    It 'fails on a plain exit code 1' {
+        (& $Private.Completion -Target $Target2025 -PowerState running -Status (New-Status @{ TaskResult = [uint32]1 }) -StartedAt $fresh -Now $now).Result | Should -Be 'Failed'
+    }
+
+    It 'does not treat Task Scheduler status codes as failures' {
+        foreach ($code in @(0x41301, 0x41303, 0x41306)) {
+            $d = & $Private.Completion -Target $Target2025 -PowerState running -Status (New-Status @{ TaskResult = [uint32]$code }) -StartedAt $fresh -Now $now
+            $d.Result | Should -Be 'InProgress'
+            $d.TaskFailed | Should -BeFalse
+        }
+    }
+
+    It 'waits on the old build with a clean task until the timeout' {
+        (& $Private.Completion -Target $Target2025 -PowerState running -Status (New-Status) -StartedAt $fresh -Now $now).Result | Should -Be 'InProgress'
+        (& $Private.Completion -Target $Target2025 -PowerState running -Status (New-Status) -StartedAt $stale -Now $now).Result | Should -Be 'Failed'
+    }
+
+    It 'never expires without a start timestamp' {
+        $d = & $Private.Completion -Target $Target2025 -PowerState running -Status (New-Status) -StartedAt $null -Now $now
+        $d.Result | Should -Be 'InProgress'
+        $d.Expired | Should -BeFalse
+        $d.AgeMinutes | Should -BeNullOrEmpty
     }
 }
 

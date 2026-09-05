@@ -14,8 +14,11 @@
         @{ ModuleName = 'Az.Resources'; ModuleVersion = '6.16.0' }
     )
     FunctionsToExport    = @(
+        'Complete-InPlaceUpgrade'
         'Get-InPlaceUpgradeCandidate'
         'Get-InPlaceUpgradeTarget'
+        'Invoke-InPlaceUpgrade'
+        'Start-InPlaceUpgrade'
         'Test-InPlaceUpgradeReadiness'
     )
     CmdletsToExport      = @()

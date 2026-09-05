@@ -17,6 +17,14 @@ All notable changes to this project are documented here. The format follows
 - Pester tests for the matrix, target resolution, tag filtering, guest output parsing and every
   readiness rule.
 - `deploy/lab.bicep`: one tagged source VM without public IP for lab verification.
+- `Start-InPlaceUpgrade` — preflight, incremental OS disk snapshot, media disk from the hidden
+  upgrade image, attach, locate `setup.exe`, start Setup through a SYSTEM scheduled task, tags.
+- `Complete-InPlaceUpgrade` — evaluates `UpgradeStarted` VMs to Completed / Failed / InProgress,
+  fetches the Panther log excerpt on failure, removes the media disk and the scheduled task.
+- `Invoke-InPlaceUpgrade` — Start plus polling Complete, for local runs and Hybrid Workers.
+- Tags `UpgradeSnapshot` and `UpgradeMediaDisk` point at the artefacts of the current run.
+- Completion rules isolated in a pure function; Task Scheduler status codes (0x4130x) are not
+  treated as Setup failures.
 
 ### Verified
 - 2026-09-05: `Test-InPlaceUpgradeReadiness` end to end against a fresh Windows Server 2022

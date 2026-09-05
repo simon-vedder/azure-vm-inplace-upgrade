@@ -10,7 +10,7 @@ function Get-GuestFacts {
         [Parameter(Mandatory)][string]$VMName
     )
 
-    $result = Invoke-GuestScript -ResourceGroupName $ResourceGroupName -VMName $VMName -ScriptText (Get-GuestFactsScript)
+    $result = Invoke-GuestScript -ResourceGroupName $ResourceGroupName -VMName $VMName -ScriptText (Get-GuestScript -Name Facts)
     if (-not $result.Success) {
         return [pscustomobject]@{ Facts = $null; Error = $result.Error }
     }

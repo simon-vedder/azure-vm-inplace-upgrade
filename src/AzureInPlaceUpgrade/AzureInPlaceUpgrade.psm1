@@ -11,7 +11,15 @@ $script:Tag = @{
     Ring      = 'UpgradeRing'
     State     = 'UpgradeState'
     StartedAt = 'UpgradeStartedAt'
+    # Pointers to the artefacts of the current run. State, not history: they are overwritten by
+    # the next run and let Complete find what Start created without guessing names.
+    Snapshot  = 'UpgradeSnapshot'
+    MediaDisk = 'UpgradeMediaDisk'
 }
+
+# Inside the guest: the scheduled task that runs Setup, and where /copylogs puts the logs.
+$script:GuestTaskName = 'AzureInPlaceUpgrade'
+$script:GuestLogDirectory = 'C:\Windows\Temp\AzureInPlaceUpgrade'
 
 $script:State = @{
     Pending         = 'Pending'
