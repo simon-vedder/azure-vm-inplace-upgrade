@@ -22,7 +22,8 @@ param logRetentionDays int = 90
 @description('AzureInPlaceUpgrade module version on the PowerShell Gallery.')
 param moduleVersion string
 
-@description('Version stamp written to the module and runbook content links. Defaults to moduleVersion; bump it to force Automation to re-import unchanged URIs.')
+@description('Version stamp written to the module and runbook content links, System.Version form (up to four numeric parts, e.g. 0.2.0.1). Defaults to moduleVersion; bump it to force Automation to re-import unchanged URIs.')
+@minLength(0)
 param contentVersion string = ''
 
 @description('Override the module package source, for example a GitHub release asset before the first Gallery release. Empty means the Gallery URL for moduleVersion.')

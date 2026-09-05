@@ -35,7 +35,7 @@ until you redeploy with `startScheduleEnabled=true`, and even then only VMs tagg
 
 Before the first Gallery release, point `modulePackageUri` at a GitHub release asset (a zip of
 `src/AzureInPlaceUpgrade`) and `runbookContentUri` at the raw runbook URL of a tag. When the content
-behind an unchanged URI changes, bump `contentVersion` (defaults to `moduleVersion`): Automation
+behind an unchanged URI changes, bump `contentVersion` (defaults to `moduleVersion`, must look like a `System.Version`, e.g. `0.2.0.7`): Automation
 only re-imports a module or re-publishes a runbook when the version stamp on the link changes.
 
 ## Lab
