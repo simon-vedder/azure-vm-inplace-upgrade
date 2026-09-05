@@ -5,16 +5,37 @@ documented by Microsoft. Each entry says which. "To verify" means it is on the l
 
 ## Setup and media
 
-- **`0xC1900215` / "PidGenX function failed on this product key" under `/quiet`.** *(observed,
-  reproduced 2026-09-05 on a plain `2022-datacenter-g2` Marketplace VM: `CallPidGenX ... hr =
-  0x8a010001`, then `CDlpActionProductKeyValidate::SelectImageIndex: 0xC1900215`, two and a half
-  minutes after Setup started)*
-  Unattended Setup cannot always map the guest's AVMA activation to an image in the multi-edition
-  `install.wim` on the upgrade media. The GUI asks you to pick the edition; `/quiet` has nobody to
-  ask and aborts. Fix: pass the public KMS client setup key (GVLK) of the matching edition via
-  `/pkey`. The key does not activate anything; it only tells Setup which image to use. The matrix
-  ships those keys per target and edition. Passing the wrong edition's key silently installs the
-  wrong edition — the module never guesses.
+- **`0xC1900215` under `/quiet`: the GUI works, the unattended run does not.** *(observed,
+  reproduced twice on 2026-09-05 on a plain `2022-datacenter-g2` Marketplace VM, with and without
+  `/pkey`)* `setuperr.log` shows `CallPidGenX: PidGenX function failed on this product key
+  (hr = 0x8a010001)` and looks like a licensing problem. It is not. `setupact.log` tells the real
+  story:
+
+  ```
+  ProductKey: Matching Install Wim: Found [2] matching images.
+  ProductKey: Product key was successfully validated.
+  ProductKey: SelectImageIndex: Found multiple matching images. Querying for image index.
+  ProductKey: Image selection response not found.
+  ProductKey: SelectImageIndex: Image index not found in response. Selecting image index from SkuLib.
+  ProductKey: No SkuLib Upgrade edition available.
+  CDlpActionProductKeyValidate::SelectImageIndex(1978): Result = 0xC1900215
+  ```
+
+  The upgrade media carries two images per edition, Core and Desktop Experience. In the GUI a
+  human picks one. In `/quiet` mode nobody answers, Setup falls back to its SkuLib, finds no
+  upgrade edition there and aborts. The PidGenX line is the failed attempt to report the host's
+  install channel to telemetry, a side show. A `/pkey`, even a valid one, changes nothing because
+  the key is not the problem.
+
+  **Fix:** name the image. The module lists the media's `install.wim` with `Get-WindowsImage`,
+  matches the guest's `EditionId` and `InstallationType` against it and passes
+  `/installfrom <install.wim> /imageindex <n>`. On the `server2025Upgrade` media of 2026-09
+  the images are 1 Standard Core, 2 Standard Desktop Experience, 3 Datacenter Core,
+  4 Datacenter Desktop Experience; the module never assumes those numbers.
+  *(fix under live verification at the time of writing)*
+- **`/pkey` is not the answer to `0xC1900215`.** *(observed)* Microsoft Q&A threads recommend
+  the target version's KMS client setup key. It validates, and Setup still fails at image
+  selection. The module keeps `-UseMatrixProductKey` for guests whose own key does not validate.
 - **A failed Setup attempt leaves `CBS RebootPending` behind.** *(observed, 2026-09-05)* After
   the `0xC1900215` abort, Setup had cleaned up `$WINDOWS.~BT` but Component Based Servicing still
   flagged a pending reboot, so the preflight blocked the retry. Reboot, then start again; the

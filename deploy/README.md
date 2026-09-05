@@ -1,8 +1,37 @@
 # deploy/
 
-`lab.bicep` builds one tagged source VM to verify the module against. `main.bicep` (Automation
-Account, identity, custom role, module import, schedules, Log Analytics, workbook) follows once
-`Start-InPlaceUpgrade` exists.
+`main.bicep` deploys the orchestrator. `lab.bicep` builds one tagged source VM to verify the module
+against.
+
+## Orchestrator (`main.bicep`)
+
+Subscription-scope deployment, because the custom role definition lives there:
+
+```bash
+az deployment sub create -l westeurope -f deploy/main.bicep \
+  -p moduleVersion=0.1.0 targetResourceGroupName=rg-apps-prod-weu ring=Ring0 maxParallel=3
+```
+
+What it creates:
+
+| Resource | Purpose |
+|---|---|
+| Resource group `rg-inplaceupgrade-weu` | everything below |
+| Automation Account, system-assigned identity, local auth disabled | runs the runbook |
+| Log Analytics workspace + diagnostic settings | job logs and streams |
+| Modules `Az.Accounts`, `Az.Compute`, `Az.Resources`, `AzureInPlaceUpgrade` (PowerShell 7.2 runtime) | pinned versions from the Gallery |
+| Runbook `Invoke-InPlaceUpgradeRunbook` (PowerShell 7.2) | the thin wrapper from `src/runbooks/` |
+| Schedule `inplaceupgrade-check`, every 20 minutes, linked | finishes running upgrades |
+| Schedule `inplaceupgrade-start`, daily, **not linked** unless `startScheduleEnabled=true` | starts approved upgrades |
+| Custom role *Azure VM In-Place Upgrade Operator* | exactly the actions Start and Complete need |
+| Role assignment on `targetResourceGroupName`, or the subscription when empty | least privilege |
+
+Nothing starts an upgrade by itself. The Start schedule is created but not linked to the runbook
+until you redeploy with `startScheduleEnabled=true`, and even then only VMs tagged
+`UpgradeState=Pending` are touched.
+
+Before the first Gallery release, point `modulePackageUri` at a GitHub release asset (a zip of
+`src/AzureInPlaceUpgrade`) and `runbookContentUri` at the raw runbook URL of a tag.
 
 ## Lab
 

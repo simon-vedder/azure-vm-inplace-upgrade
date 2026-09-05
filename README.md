@@ -101,10 +101,11 @@ the media disk and the scheduled task, and leaves the snapshot for you to delete
 the result. On a Setup failure the result carries the tail of `setuperr.log` and the compat scan
 blocks, so the HRESULT does not stand alone.
 
-If Setup dies with `0xC1900215` ("PidGenX function failed"), rerun with `-UseMatrixProductKey`:
-it passes Microsoft's public KMS client setup key for the guest's edition as `/pkey`, which is
-the documented way to make unattended Setup pick the right image. See
-[KNOWN-ISSUES.md](KNOWN-ISSUES.md).
+Why the upgrade works here where a plain `setup.exe /auto upgrade /quiet` fails with
+`0xC1900215`: the media carries a Core and a Desktop Experience image per edition, and unattended
+Setup cannot choose between them. The module reads the `install.wim` metadata, matches the
+guest's edition and installation type and passes `/installfrom` and `/imageindex`. The full
+mechanism, with the log lines, is in [KNOWN-ISSUES.md](KNOWN-ISSUES.md).
 
 The preflight checks, cheapest first: power state, OS type, managed and non-ephemeral OS disk,
 security type, guest reachability, source build against the matrix, edition, installation type,
@@ -116,9 +117,9 @@ Setup, activation channel, and whether the upgrade media image exists in the VM'
 `src/runbooks/Invoke-InPlaceUpgradeRunbook.ps1` is the thin wrapper: sign in with the managed
 identity, discover by tag, apply `-Ring` and `-MaxParallel`, call the module per VM. Two
 schedules: `-Mode Start` once per maintenance window, `-Mode Check` every 20 to 30 minutes.
-`-MaxParallel` counts the VMs already in `UpgradeStarted`, so a Start job never exceeds it. The
-Bicep deployment that creates the account, identity, role, module import and schedules is on
-the roadmap.
+`-MaxParallel` counts the VMs already in `UpgradeStarted`, so a Start job never exceeds it.
+`deploy/main.bicep` creates the account, identity, least-privilege role, module imports and
+schedules; see [deploy/README.md](deploy/README.md).
 
 ## Tags
 
@@ -199,10 +200,10 @@ tests/                       Pester
 2. ✅ Lab: preflight against a 2022 guest (2016 and 2019 pending).
 3. ✅ `Start-InPlaceUpgrade` / `Complete-InPlaceUpgrade` / `Invoke-InPlaceUpgrade` with the
    MediaDisk engine. First 2022 → 2025 lab run in progress.
-4. Runbook wrapper, `Start` / `Check` modes.
-5. FeatureUpdate spike.
-6. Bicep: Automation Account, custom role, module import, schedules. Deploy-to-Azure button.
-7. Log Analytics table + workbook.
+4. ✅ Runbook wrapper, `Start` / `Check` modes.
+5. ✅ Bicep: Automation Account, custom role, module import, schedules (written, not yet deployed in the lab).
+6. FeatureUpdate spike.
+7. Log Analytics table + workbook; Deploy-to-Azure button.
 8. Lab: 2016 → 2025, 2019 → 2025, Server Core.
 9. PowerShell Gallery release.
 
