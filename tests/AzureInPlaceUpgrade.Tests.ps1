@@ -21,6 +21,8 @@ BeforeAll {
             GuestScript  = Get-Command Get-GuestScript
             ToStamp      = Get-Command ConvertTo-TagTimestamp
             FromStamp    = Get-Command ConvertFrom-TagTimestamp
+            WimParse     = Get-Command ConvertFrom-GuestWimImage
+            SelectImage  = Get-Command Select-UpgradeImageIndex
         }
     }
 
@@ -89,7 +91,7 @@ Describe 'Module' {
         $exported | Should -Be @('Complete-InPlaceUpgrade', 'Get-InPlaceUpgradeCandidate', 'Get-InPlaceUpgradeTarget', 'Invoke-InPlaceUpgrade', 'Start-InPlaceUpgrade', 'Test-InPlaceUpgradeReadiness')
     }
 
-    It 'keeps every guest script free of PowerShell 7 syntax (<_>)' -ForEach @('Facts', 'SetupPath', 'Launch', 'Status', 'LogTail', 'RemoveTask') {
+    It 'keeps every guest script free of PowerShell 7 syntax (<_>)' -ForEach @('Facts', 'SetupPath', 'WimImages', 'Launch', 'Status', 'LogTail', 'RemoveTask') {
         $script = & $Private.GuestScript -Name $_
         $tokens = $null
         $errors = $null
@@ -372,6 +374,42 @@ Describe 'Completion rules (Resolve-UpgradeCompletion)' {
         $d.Result | Should -Be 'InProgress'
         $d.Expired | Should -BeFalse
         $d.AgeMinutes | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Image selection (Select-UpgradeImageIndex)' {
+    BeforeAll {
+        # The four images of the server2025Upgrade media, as listed live on 2026-09-05.
+        $wimLine = 'IPU-IMAGES={"WimPath":"E:\\Windows Server 2025\\sources\\install.wim","Images":[{"Index":1,"Name":"Windows Server 2025 Standard","EditionId":"ServerStandard","InstallationType":"Server Core","Version":"10.0.26100.33296"},{"Index":2,"Name":"Windows Server 2025 Standard (Desktop Experience)","EditionId":"ServerStandard","InstallationType":"Server","Version":"10.0.26100.33296"},{"Index":3,"Name":"Windows Server 2025 Datacenter","EditionId":"ServerDatacenter","InstallationType":"Server Core","Version":"10.0.26100.33296"},{"Index":4,"Name":"Windows Server 2025 Datacenter (Desktop Experience)","EditionId":"ServerDatacenter","InstallationType":"Server","Version":"10.0.26100.33296"}]}'
+        $wim = & $Private.WimParse -Output ("noise`n" + $wimLine)
+    }
+
+    It 'parses the guest image list' {
+        $wim.Error | Should -BeNullOrEmpty
+        $wim.WimPath | Should -Be 'E:\Windows Server 2025\sources\install.wim'
+        $wim.Images.Count | Should -Be 4
+        $wim.Images[3].Index | Should -Be 4
+        $wim.Images[3].InstallationType | Should -Be 'Server'
+    }
+
+    It 'returns an error object when the marker is missing' {
+        (& $Private.WimParse -Output 'nothing').Error | Should -Match 'no image list'
+    }
+
+    It 'picks Datacenter Desktop Experience for a Datacenter Server guest' {
+        & $Private.SelectImage -Image $wim.Images -EditionId 'ServerDatacenter' -InstallationType 'Server' | Should -Be 4
+    }
+
+    It 'picks the Core image for a Server Core guest, also with a Cor edition suffix' {
+        & $Private.SelectImage -Image $wim.Images -EditionId 'ServerDatacenter' -InstallationType 'Server Core' | Should -Be 3
+        & $Private.SelectImage -Image $wim.Images -EditionId 'ServerStandardCor' -InstallationType 'Server Core' | Should -Be 1
+    }
+
+    It 'refuses to guess when nothing or more than one image matches' {
+        & $Private.SelectImage -Image $wim.Images -EditionId 'ServerDatacenterAzureEdition' -InstallationType 'Server' | Should -BeNullOrEmpty
+        $twice = @($wim.Images[3], $wim.Images[3])
+        & $Private.SelectImage -Image $twice -EditionId 'ServerDatacenter' -InstallationType 'Server' | Should -BeNullOrEmpty
+        & $Private.SelectImage -Image @() -EditionId 'ServerDatacenter' -InstallationType 'Server' | Should -BeNullOrEmpty
     }
 }
 

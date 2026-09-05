@@ -11,6 +11,7 @@ function Get-GuestScript {
 
     Facts      read-only inventory for the preflight
     SetupPath  bring the media disk online and locate setup.exe
+    WimImages  list the images in the media's install.wim with edition and installation type
     Launch     register and start the scheduled task that runs Setup (ADR 0001)
     Status     build number, Setup processes, task state and last result
     LogTail    excerpt of the Panther logs after a failure
@@ -20,7 +21,7 @@ function Get-GuestScript {
     [OutputType([string])]
     param(
         [Parameter(Mandatory)]
-        [ValidateSet('Facts', 'SetupPath', 'Launch', 'Status', 'LogTail', 'RemoveTask')]
+        [ValidateSet('Facts', 'SetupPath', 'WimImages', 'Launch', 'Status', 'LogTail', 'RemoveTask')]
         [string]$Name
     )
 
@@ -115,9 +116,37 @@ else {
 '@
         }
 
+        'WimImages' {
+            return @'
+param([string]$SetupPath)
+$ErrorActionPreference = 'Stop'
+
+$root = [System.IO.Path]::GetDirectoryName($SetupPath)
+$wim = Get-ChildItem -Path $root -Recurse -Depth 2 -Include 'install.wim', 'install.esd' -File -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $wim) {
+    Write-Output ('IPU-IMAGES=' + (@{ WimPath = ''; Images = @() } | ConvertTo-Json -Compress))
+    exit 0
+}
+
+$images = @()
+foreach ($img in (Get-WindowsImage -ImagePath $wim.FullName)) {
+    $detail = Get-WindowsImage -ImagePath $wim.FullName -Index $img.ImageIndex
+    $images += [pscustomobject]@{
+        Index            = [int]$img.ImageIndex
+        Name             = [string]$img.ImageName
+        EditionId        = [string]$detail.EditionId
+        InstallationType = [string]$detail.InstallationType
+        Version          = [string]$detail.Version
+    }
+}
+
+Write-Output ('IPU-IMAGES=' + (@{ WimPath = $wim.FullName; Images = $images } | ConvertTo-Json -Compress -Depth 3))
+'@
+        }
+
         'Launch' {
             return @'
-param([string]$SetupPath, [string]$TaskName, [string]$ProductKey, [int]$TargetImageIndex, [string]$LogDirectory)
+param([string]$SetupPath, [string]$TaskName, [string]$ProductKey, [int]$TargetImageIndex, [string]$InstallFrom, [string]$LogDirectory)
 $ErrorActionPreference = 'Stop'
 
 if (-not (Test-Path -LiteralPath $SetupPath)) {
@@ -143,7 +172,8 @@ if ($ProductKey) { $arguments = '{0} /pkey {1}' -f $arguments, $ProductKey }
 
 $workingDirectory = [System.IO.Path]::GetDirectoryName($SetupPath)
 if ($TargetImageIndex -gt 0) {
-    $installFile = Join-Path $workingDirectory 'Sources\Install.wim'
+    $installFile = $InstallFrom
+    if (-not $installFile) { $installFile = Join-Path $workingDirectory 'sources\install.wim' }
     if (-not (Test-Path -LiteralPath $installFile)) {
         Write-Output ('RESULT=INSTALLWIMNOTFOUND;WIM={0}' -f $installFile)
         exit 0

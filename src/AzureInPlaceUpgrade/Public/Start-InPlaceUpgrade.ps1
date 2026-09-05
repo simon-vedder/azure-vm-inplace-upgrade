@@ -14,9 +14,11 @@ function Start-InPlaceUpgrade {
     UpgradeMediaDisk, UpgradeStartedAt (Unix epoch seconds, UTC). On any failure the state becomes Failed, the media disk
     is removed unless -KeepMediaDisk is set, and the snapshot stays.
 
-    Idempotent: a VM already in UpgradeStarted or Completed is skipped, a VM in SnapshotCreated
-    reuses its snapshot, an existing media disk is reused, an attached disk is not attached twice
-    and a running Setup is not started again.
+    Idempotent: a VM already in UpgradeStarted or Completed is skipped, a VM in SnapshotCreated or
+    Failed reuses its snapshot, an existing media disk is reused, an attached disk is not attached
+    twice and a running Setup is not started again. The install.wim image is always passed
+    explicitly (/installfrom, /imageindex), detected from the media's WIM metadata, because
+    unattended Setup cannot choose between the Core and Desktop Experience images itself.
 
     This changes the VM. ConfirmImpact is High, so it prompts unless -Confirm:$false or -Force is
     given; -WhatIf runs the preflight and stops before the snapshot.
@@ -47,13 +49,14 @@ function Start-InPlaceUpgrade {
     ends up in the scheduled task definition, visible to every local administrator.
 
     .PARAMETER UseMatrixProductKey
-    Pass the matrix's public KMS client setup key for the guest's edition as /pkey. This is the
-    documented fix for HRESULT 0xC1900215 (PidGenX) when unattended Setup cannot resolve the
-    edition against the multi-edition install.wim.
+    Pass the matrix's public KMS client setup key for the guest's edition as /pkey. Rarely needed:
+    the 0xC1900215 failure is caused by image selection, not by the key (see KNOWN-ISSUES), and
+    is solved by the explicit image index below. Kept for guests whose own key does not validate.
 
     .PARAMETER TargetImageIndex
-    install.wim image index for setup.exe /installfrom and /imageindex. Media-dependent; verify
-    with DISM before use.
+    Override the install.wim image index for setup.exe /installfrom and /imageindex. By default
+    the index is detected from the WIM metadata by matching the guest's edition and installation
+    type; an override is refused when the index does not exist on the media.
 
     .PARAMETER MinimumFreeSpaceGB
     Free space required on C: by the preflight.
@@ -230,7 +233,9 @@ function Start-InPlaceUpgrade {
 
         try {
             $existingSnapshot = Get-VMTagValue -VM $VM -Name $tagSnapshot
-            if ($state -ieq $script:State.SnapshotCreated -and $existingSnapshot -and
+            # A retry after SnapshotCreated or Failed keeps the snapshot of the state before the
+            # first attempt; that is the cleaner rollback point and saves a copy.
+            if ($state -in @($script:State.SnapshotCreated, $script:State.Failed) -and $existingSnapshot -and
                 (Get-AzSnapshot -ResourceGroupName $rg -SnapshotName $existingSnapshot -ErrorAction SilentlyContinue)) {
                 $snapshotName = $existingSnapshot
                 Write-Verbose "[$vmName] Reusing snapshot '$snapshotName' from the previous attempt."
@@ -252,7 +257,27 @@ function Start-InPlaceUpgrade {
             $setupPath = $media.SetupPath
             Write-Verbose "[$vmName] Upgrade media at '$setupPath'."
 
-            $launch = Start-GuestSetup -ResourceGroupName $rg -VMName $vmName -SetupPath $setupPath -ProductKey $effectiveKey -TargetImageIndex $TargetImageIndex
+            # Unattended Setup cannot choose between the Core and Desktop Experience images of the
+            # same edition and aborts with 0xC1900215; the image is therefore always named
+            # explicitly, detected from the WIM metadata unless -TargetImageIndex overrides it.
+            $wim = Get-GuestWimImage -ResourceGroupName $rg -VMName $vmName -SetupPath $setupPath
+            if ($wim.Error) { throw $wim.Error }
+            $imageIndex = $TargetImageIndex
+            if ($imageIndex -gt 0) {
+                $chosen = $wim.Images | Where-Object { $_.Index -eq $imageIndex } | Select-Object -First 1
+                if (-not $chosen) { throw "-TargetImageIndex $imageIndex does not exist in '$($wim.WimPath)'. Images: $(($wim.Images | ForEach-Object { "$($_.Index)=$($_.Name)" }) -join ', ')" }
+                Write-Verbose "[$vmName] Using image $imageIndex '$($chosen.Name)' as requested."
+            }
+            else {
+                $imageIndex = Select-UpgradeImageIndex -Image $wim.Images -EditionId $readiness.Edition -InstallationType $readiness.InstallationType
+                if (-not $imageIndex) {
+                    throw "No single image in '$($wim.WimPath)' matches edition '$($readiness.Edition)' with installation type '$($readiness.InstallationType)'. Images: $(($wim.Images | ForEach-Object { "$($_.Index)=$($_.Name) [$($_.EditionId)/$($_.InstallationType)]" }) -join ', '). Pass -TargetImageIndex explicitly."
+                }
+                $chosen = $wim.Images | Where-Object { $_.Index -eq $imageIndex } | Select-Object -First 1
+                Write-Verbose "[$vmName] Image $imageIndex '$($chosen.Name)' matches $($readiness.Edition) / $($readiness.InstallationType)."
+            }
+
+            $launch = Start-GuestSetup -ResourceGroupName $rg -VMName $vmName -SetupPath $setupPath -ProductKey $effectiveKey -TargetImageIndex $imageIndex -InstallFrom $wim.WimPath
             if (-not $launch.Started) { throw $launch.Reason }
             Write-Verbose "[$vmName] $($launch.Reason) $($launch.Raw)"
 

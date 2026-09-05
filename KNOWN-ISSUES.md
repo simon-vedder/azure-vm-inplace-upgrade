@@ -15,6 +15,10 @@ documented by Microsoft. Each entry says which. "To verify" means it is on the l
   `/pkey`. The key does not activate anything; it only tells Setup which image to use. The matrix
   ships those keys per target and edition. Passing the wrong edition's key silently installs the
   wrong edition — the module never guesses.
+- **A failed Setup attempt leaves `CBS RebootPending` behind.** *(observed, 2026-09-05)* After
+  the `0xC1900215` abort, Setup had cleaned up `$WINDOWS.~BT` but Component Based Servicing still
+  flagged a pending reboot, so the preflight blocked the retry. Reboot, then start again; the
+  module does not reboot a VM on its own.
 - **`EI.cfg` is not a reliable way to force the edition for `/auto upgrade`.** *(observed)*
 - **`/compat ignorewarning` is mandatory.** *(observed)* Without it, ignorable compatibility
   warnings abort the silent run.

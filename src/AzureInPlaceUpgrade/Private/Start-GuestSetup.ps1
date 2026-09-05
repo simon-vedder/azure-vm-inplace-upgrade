@@ -11,7 +11,8 @@ function Start-GuestSetup {
         [Parameter(Mandatory)][string]$VMName,
         [Parameter(Mandatory)][string]$SetupPath,
         [Parameter()][string]$ProductKey,
-        [Parameter()][int]$TargetImageIndex = 0
+        [Parameter()][int]$TargetImageIndex = 0,
+        [Parameter()][string]$InstallFrom
     )
 
     $result = Invoke-GuestScript -ResourceGroupName $ResourceGroupName -VMName $VMName -ScriptText (Get-GuestScript -Name Launch) -Parameter @{
@@ -19,6 +20,7 @@ function Start-GuestSetup {
         TaskName         = $script:GuestTaskName
         ProductKey       = $ProductKey
         TargetImageIndex = $TargetImageIndex
+        InstallFrom      = $InstallFrom
         LogDirectory     = $script:GuestLogDirectory
     }
     if (-not $result.Success) {
