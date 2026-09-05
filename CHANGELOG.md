@@ -23,6 +23,8 @@ All notable changes to this project are documented here. The format follows
   fetches the Panther log excerpt on failure, removes the media disk and the scheduled task.
 - `Invoke-InPlaceUpgrade` — Start plus polling Complete, for local runs and Hybrid Workers.
 - Tags `UpgradeSnapshot` and `UpgradeMediaDisk` point at the artefacts of the current run.
+- `src/runbooks/Invoke-InPlaceUpgradeRunbook.ps1`: thin Azure Automation wrapper with Start and
+  Check modes, ring filter and a parallelism limit that counts VMs already in progress.
 - Completion rules isolated in a pure function; Task Scheduler status codes (0x4130x) are not
   treated as Setup failures.
 

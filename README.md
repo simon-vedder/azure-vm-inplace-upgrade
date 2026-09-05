@@ -11,9 +11,9 @@ from Run Command, tracks the VM through a state machine across Azure Automation 
 the build inside the guest and cleans up. Windows Server 2012 R2, 2016, 2019 and 2022 to 2025,
 using the upgrade media Microsoft ships as a hidden Marketplace image.
 
-> **Status: pre-release.** Only the read-only preflight exists so far. Nothing in the target
-> matrix is lab-verified yet, and the README will not claim otherwise until it is.
-> See [Roadmap](#roadmap).
+> **Status: pre-release.** Preflight, Start and Complete exist; the first end-to-end lab run is
+> in progress. Nothing in the target matrix is lab-verified yet, and the README will not claim
+> otherwise until it is. See [Roadmap](#roadmap).
 
 ## Read this first
 
@@ -65,7 +65,7 @@ Two things make the unattended path work at all, and both are decisions recorded
 Validation reads `CurrentBuildNumber` from the guest registry. ARM keeps reporting the original
 image forever; the guest does not lie.
 
-## Quick start (preflight only, today)
+## Quick start
 
 ```powershell
 Import-Module ./src/AzureInPlaceUpgrade      # Install-Module AzureInPlaceUpgrade once it is on the Gallery
@@ -83,12 +83,42 @@ $r.Checks | Format-Table Name, Result, Detail -AutoSize
 # Everything that is tagged and approved, one line per VM
 Get-InPlaceUpgradeCandidate | Test-InPlaceUpgradeReadiness |
     Select-Object VMName, SourceName, Target, Engine, Decision, Failures, Warnings
+
+# Start: snapshot, media disk, Setup through a scheduled task. Returns in minutes. Prompts first.
+Start-InPlaceUpgrade -ResourceGroupName rg-apps-prod-weu -Name vm-app-prod-weu-01
+
+# Check: run this every 20-30 minutes until every VM is Completed or Failed
+Get-InPlaceUpgradeCandidate -State UpgradeStarted | Complete-InPlaceUpgrade | Select-Object VMName, Result, Reason
+
+# Or, outside Azure Automation, both in one call that waits
+Invoke-InPlaceUpgrade -ResourceGroupName rg-ipu-lab-weu -Name vm-ipu-2022-01 -TimeoutMinutes 300 -Confirm:$false -Verbose
 ```
+
+What Start leaves behind on success: the VM in `UpgradeState=UpgradeStarted`, an incremental OS
+disk snapshot named in `UpgradeSnapshot`, the media disk named in `UpgradeMediaDisk`, and
+`UpgradeStartedAt`. What Complete does on a final state: sets `Completed` or `Failed`, removes
+the media disk and the scheduled task, and leaves the snapshot for you to delete once you trust
+the result. On a Setup failure the result carries the tail of `setuperr.log` and the compat scan
+blocks, so the HRESULT does not stand alone.
+
+If Setup dies with `0xC1900215` ("PidGenX function failed"), rerun with `-UseMatrixProductKey`:
+it passes Microsoft's public KMS client setup key for the guest's edition as `/pkey`, which is
+the documented way to make unattended Setup pick the right image. See
+[KNOWN-ISSUES.md](KNOWN-ISSUES.md).
 
 The preflight checks, cheapest first: power state, OS type, managed and non-ephemeral OS disk,
 security type, guest reachability, source build against the matrix, edition, installation type,
 architecture, language, free space, pending reboot, domain controller, cluster service, running
 Setup, activation channel, and whether the upgrade media image exists in the VM's region.
+
+## Azure Automation
+
+`src/runbooks/Invoke-InPlaceUpgradeRunbook.ps1` is the thin wrapper: sign in with the managed
+identity, discover by tag, apply `-Ring` and `-MaxParallel`, call the module per VM. Two
+schedules: `-Mode Start` once per maintenance window, `-Mode Check` every 20 to 30 minutes.
+`-MaxParallel` counts the VMs already in `UpgradeStarted`, so a Start job never exceeds it. The
+Bicep deployment that creates the account, identity, role, module import and schedules is on
+the roadmap.
 
 ## Tags
 
@@ -98,6 +128,8 @@ Setup, activation channel, and whether the upgrade media image exists in the VM'
 | `UpgradeState` | `Pending` → `SnapshotCreated` → `UpgradeStarted` → `Completed` \| `Failed` | where the VM is; **setting `Pending` is the approval** |
 | `UpgradeRing` | free text, e.g. `Ring0` | optional; the orchestrator can be told to process one ring |
 | `UpgradeStartedAt` | UTC timestamp, written by the tool | timeout base for the Check job |
+| `UpgradeSnapshot` | snapshot name, written by the tool | the rollback point of the current run |
+| `UpgradeMediaDisk` | `<resource group>/<disk name>`, written by the tool | what Complete cleans up |
 
 No approval tag, no history in tags. History goes to Log Analytics
 ([ADR 0002](docs/decisions/0002-tags-are-state-logs-are-history.md)).
@@ -135,8 +167,17 @@ Microsoft.Compute/virtualMachines/runCommand/action
 Microsoft.Compute/locations/publishers/artifacttypes/offers/skus/versions/read
 ```
 
-The upgrade itself (snapshot, disk create/attach/delete, tag writes) will need more; the exact
-custom role ships with the Bicep deployment.
+Start and Complete need, in addition:
+
+```
+Microsoft.Compute/virtualMachines/write            attach and detach the media disk
+Microsoft.Compute/disks/read, write, delete        media disk
+Microsoft.Compute/snapshots/read, write            rollback point
+Microsoft.Resources/tags/write                     state tags
+Microsoft.Resources/subscriptions/resourceGroups/read
+```
+
+The exact custom role ships with the Bicep deployment.
 
 ## Layout
 
@@ -155,8 +196,9 @@ tests/                       Pester
 
 1. ✅ Module skeleton, target matrix, `Get-InPlaceUpgradeTarget`, `Get-InPlaceUpgradeCandidate`,
    `Test-InPlaceUpgradeReadiness`, Pester for every rule.
-2. Lab: preflight against 2016, 2019, 2022 guests.
-3. `Start-InPlaceUpgrade` / `Complete-InPlaceUpgrade` with the MediaDisk engine, 2022 → 2025.
+2. ✅ Lab: preflight against a 2022 guest (2016 and 2019 pending).
+3. ✅ `Start-InPlaceUpgrade` / `Complete-InPlaceUpgrade` / `Invoke-InPlaceUpgrade` with the
+   MediaDisk engine. First 2022 → 2025 lab run in progress.
 4. Runbook wrapper, `Start` / `Check` modes.
 5. FeatureUpdate spike.
 6. Bicep: Automation Account, custom role, module import, schedules. Deploy-to-Azure button.
