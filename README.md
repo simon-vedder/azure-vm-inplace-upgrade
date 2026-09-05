@@ -127,7 +127,7 @@ the roadmap.
 | `UpgradeTarget` | a matrix key: `WS2025`, `WS2022`, `WS2019` | what is wanted |
 | `UpgradeState` | `Pending` → `SnapshotCreated` → `UpgradeStarted` → `Completed` \| `Failed` | where the VM is; **setting `Pending` is the approval** |
 | `UpgradeRing` | free text, e.g. `Ring0` | optional; the orchestrator can be told to process one ring |
-| `UpgradeStartedAt` | UTC timestamp, written by the tool | timeout base for the Check job |
+| `UpgradeStartedAt` | Unix epoch seconds (UTC), written by the tool | timeout base for the Check job |
 | `UpgradeSnapshot` | snapshot name, written by the tool | the rollback point of the current run |
 | `UpgradeMediaDisk` | `<resource group>/<disk name>`, written by the tool | what Complete cleans up |
 

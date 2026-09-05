@@ -11,7 +11,7 @@ where every VM is in the process without a database.
 
 Four tags on the VM: `UpgradeTarget` (what is wanted), `UpgradeRing` (optional, when it may run),
 `UpgradeState` (`Pending → SnapshotCreated → UpgradeStarted → Completed | Failed`) and
-`UpgradeStartedAt` (the timeout base). Two more point at the artefacts of the current run,
+`UpgradeStartedAt` (the timeout base, Unix epoch seconds because Az cmdlets rewrite ISO date strings on a VM round trip). Two more point at the artefacts of the current run,
 `UpgradeSnapshot` and `UpgradeMediaDisk`, so that Complete finds what Start created without
 guessing names and an operator sees the rollback point next to the VM. They are overwritten by
 the next run; that is state, not history. Setting `UpgradeState=Pending` **is** the approval; there is

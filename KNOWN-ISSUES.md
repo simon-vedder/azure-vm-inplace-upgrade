@@ -5,7 +5,10 @@ documented by Microsoft. Each entry says which. "To verify" means it is on the l
 
 ## Setup and media
 
-- **`0xC1900215` / "PidGenX function failed on this product key" under `/quiet`.** *(observed)*
+- **`0xC1900215` / "PidGenX function failed on this product key" under `/quiet`.** *(observed,
+  reproduced 2026-09-05 on a plain `2022-datacenter-g2` Marketplace VM: `CallPidGenX ... hr =
+  0x8a010001`, then `CDlpActionProductKeyValidate::SelectImageIndex: 0xC1900215`, two and a half
+  minutes after Setup started)*
   Unattended Setup cannot always map the guest's AVMA activation to an image in the multi-edition
   `install.wim` on the upgrade media. The GUI asks you to pick the edition; `/quiet` has nobody to
   ask and aborts. Fix: pass the public KMS client setup key (GVLK) of the matching edition via
@@ -28,6 +31,14 @@ documented by Microsoft. Each entry says which. "To verify" means it is on the l
   version can be wrong for another. Never assume it globally; detect it.
 
 ## Azure
+
+- **`Update-AzVM` PUTs the whole VM, tags included.** *(observed, 2026-09-05)* Attaching the
+  media disk with a VM object fetched minutes earlier silently reverted the tags written in
+  between. Every `Update-AzVM` in this module now works on a freshly read object.
+- **Az cmdlets rewrite date-like tag values.** *(observed, 2026-09-05)* `UpgradeStartedAt` was
+  written as `2026-09-05T08:25:45.6700170Z` and read back as `09/05/2026 08:25:45` after a VM
+  round trip: the SDK's JSON reader recognises ISO dates and re-serialises them in the process
+  culture. The tag therefore holds Unix epoch seconds, which nothing rewrites.
 
 - **Run Command dies with the first reboot and is capped at 90 minutes.** *(Microsoft)* Setup is
   never run synchronously; it runs from a scheduled task as SYSTEM with no execution time limit.
@@ -65,10 +76,10 @@ documented by Microsoft. Each entry says which. "To verify" means it is on the l
 - **A public GVLK is not a KMS host key** and never will be. *(Microsoft)*
 - **The upgrade media requires volume-license (KMS) activation on the guest.** *(Microsoft)*
   Marketplace VMs have it; imported VMs may not. Retail/OEM channels are flagged.
-- **A Marketplace VM in a new VNet is often not activated at all.** *(observed, 2026-09-05)* VNets
-  created after September 2025 have no default outbound access, so the guest never reaches
-  `kms.core.windows.net:1688` and sits in license status 5 (Notification) with the correct GVLK
-  channel. Whether Setup cares is on the lab list; the preflight warns.
+- **A freshly provisioned Marketplace VM reports license status 5 (Notification) for a few
+  minutes** before Azure KMS activation completes. *(observed, 2026-09-05: status 5 right after
+  provisioning, status 1 fifteen minutes later, same VM, no change.)* The preflight warns; rerun
+  it. If the status stays 5, check outbound TCP 1688 to `kms.core.windows.net`.
 
 ## Windows Update feature update (WS2019/2022 → 2025)
 

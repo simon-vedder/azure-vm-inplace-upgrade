@@ -121,10 +121,8 @@ function Complete-InPlaceUpgrade {
         $startedAt = $null
         $startedAtRaw = Get-VMTagValue -VM $VM -Name $script:Tag.StartedAt
         if ($startedAtRaw) {
-            $parsed = [datetime]::MinValue
-            $styles = [System.Globalization.DateTimeStyles]::AssumeUniversal -bor [System.Globalization.DateTimeStyles]::AdjustToUniversal
-            if ([datetime]::TryParse($startedAtRaw, [cultureinfo]::InvariantCulture, $styles, [ref]$parsed)) { $startedAt = $parsed }
-            else { Write-Warning "[$vmName] $($script:Tag.StartedAt)='$startedAtRaw' is not a timestamp; the timeout cannot be applied." }
+            $startedAt = ConvertFrom-TagTimestamp -Value $startedAtRaw
+            if ($null -eq $startedAt) { Write-Warning "[$vmName] $($script:Tag.StartedAt)='$startedAtRaw' is not a timestamp; the timeout cannot be applied." }
         }
 
         $powerState = Get-VMPowerState -ResourceGroupName $rg -VMName $vmName
@@ -176,7 +174,7 @@ function Complete-InPlaceUpgrade {
             default {
                 # Without a timestamp the age can never be judged; stamp it now so the next run can.
                 if (-not $startedAtRaw -and $PSCmdlet.ShouldProcess($vmName, "Stamp $tagStartedAt")) {
-                    Set-UpgradeTag -ResourceId $VM.Id -Tag @{ $tagStartedAt = (Get-Date).ToUniversalTime().ToString('o') }
+                    Set-UpgradeTag -ResourceId $VM.Id -Tag @{ $tagStartedAt = (ConvertTo-TagTimestamp -Value (Get-Date)) }
                 }
             }
         }

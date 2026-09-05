@@ -19,6 +19,8 @@ BeforeAll {
             MediaName    = Get-Command Get-UpgradeMediaDiskName
             Completion   = Get-Command Resolve-UpgradeCompletion
             GuestScript  = Get-Command Get-GuestScript
+            ToStamp      = Get-Command ConvertTo-TagTimestamp
+            FromStamp    = Get-Command ConvertFrom-TagTimestamp
         }
     }
 
@@ -282,6 +284,20 @@ Describe 'Helpers' {
     It 'masks a product key in setup arguments' {
         & $Private.HideKey -Text '/auto upgrade /pkey D764K-2NDRG-47T6Q-P8T8W-YP6DF /quiet' | Should -Be '/auto upgrade /pkey ***** /quiet'
         & $Private.HideKey -Text '/auto upgrade /quiet' | Should -Be '/auto upgrade /quiet'
+    }
+
+    It 'round-trips a tag timestamp through epoch seconds' {
+        $at = [datetime]::new(2026, 9, 5, 8, 25, 45, [System.DateTimeKind]::Utc)
+        $stamp = & $Private.ToStamp -Value $at
+        $stamp | Should -Match '^\d+$'
+        (& $Private.FromStamp -Value $stamp) | Should -Be $at
+    }
+
+    It 'still reads ISO and the Az-mangled invariant form as UTC' {
+        (& $Private.FromStamp -Value '2026-09-05T08:25:45.6700170Z').ToString('u') | Should -Be '2026-09-05 08:25:45Z'
+        (& $Private.FromStamp -Value '09/05/2026 08:25:45').ToString('u') | Should -Be '2026-09-05 08:25:45Z'
+        & $Private.FromStamp -Value 'yesterday' | Should -BeNullOrEmpty
+        & $Private.FromStamp -Value '' | Should -BeNullOrEmpty
     }
 
     It 'derives a stable media disk name' {

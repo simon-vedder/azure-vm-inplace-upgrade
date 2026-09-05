@@ -11,7 +11,7 @@ function Start-InPlaceUpgrade {
     30 to 120 minutes and several reboots and is finished by Complete-InPlaceUpgrade.
 
     Tags written: UpgradeState (SnapshotCreated, then UpgradeStarted), UpgradeSnapshot,
-    UpgradeMediaDisk, UpgradeStartedAt. On any failure the state becomes Failed, the media disk
+    UpgradeMediaDisk, UpgradeStartedAt (Unix epoch seconds, UTC). On any failure the state becomes Failed, the media disk
     is removed unless -KeepMediaDisk is set, and the snapshot stays.
 
     Idempotent: a VM already in UpgradeStarted or Completed is skipped, a VM in SnapshotCreated
@@ -257,7 +257,7 @@ function Start-InPlaceUpgrade {
             Write-Verbose "[$vmName] $($launch.Reason) $($launch.Raw)"
 
             $startedAt = (Get-Date).ToUniversalTime()
-            Set-UpgradeTag -ResourceId $VM.Id -Tag @{ $tagState = $script:State.UpgradeStarted; $tagStartedAt = $startedAt.ToString('o') }
+            Set-UpgradeTag -ResourceId $VM.Id -Tag @{ $tagState = $script:State.UpgradeStarted; $tagStartedAt = (ConvertTo-TagTimestamp -Value $startedAt) }
 
             return ConvertTo-StartResult 'Started' $launch.Reason
         }
