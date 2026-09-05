@@ -103,6 +103,9 @@ Describe 'Module' {
         $script | Should -Not -Match '\?\.'          # null-conditional
         $script | Should -Not -Match '\s\?\s.*\s:\s' # ternary
         $script | Should -Not -Match '&&|\|\|'       # pipeline chain operators
+        # Generated text once carried a form feed (\f) and a vertical tab (\v) from a careless
+        # string literal; both silently broke paths inside the guest.
+        $script | Should -Not -Match '[\x00-\x08\x0b\x0c\x0e-\x1f]'
     }
 }
 

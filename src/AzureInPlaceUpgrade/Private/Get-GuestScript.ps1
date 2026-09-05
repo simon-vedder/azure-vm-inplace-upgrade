@@ -241,7 +241,7 @@ if (-not $found) {
 $workerPath = Join-Path $LogDirectory 'feature-update-worker.ps1'
 $worker = @"
 `$ErrorActionPreference = 'Continue'
-`$log = '$LogDirectoryeature-update.log'
+`$log = '$LogDirectory\feature-update.log'
 function Write-Log([string]`$m) { ('{0:u} {1}' -f (Get-Date), `$m) | Out-File -FilePath `$log -Append -Encoding utf8 }
 try {
     Write-Log 'worker start'
