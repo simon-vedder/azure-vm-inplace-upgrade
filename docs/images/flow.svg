@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="300" viewBox="0 0 900 300" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14">
+  <defs>
+    <marker id="a" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#6b7280"/></marker>
+  </defs>
+  <rect x="0" y="0" width="900" height="300" fill="none"/>
+  <!-- lanes -->
+  <text x="20" y="48" fill="#6b7280" font-size="12" font-weight="600">START JOB · minutes</text>
+  <text x="20" y="188" fill="#6b7280" font-size="12" font-weight="600">CHECK JOB · every 15–30 min</text>
+  <line x1="20" y1="150" x2="880" y2="150" stroke="#e5e7eb" stroke-dasharray="4 4"/>
+  <!-- start lane boxes -->
+  <g stroke="#0078d4" stroke-width="1.5" fill="#eff6ff">
+    <rect x="20" y="60" width="130" height="56" rx="8"/>
+    <rect x="190" y="60" width="130" height="56" rx="8"/>
+    <rect x="360" y="60" width="130" height="56" rx="8"/>
+    <rect x="530" y="60" width="130" height="56" rx="8"/>
+    <rect x="700" y="60" width="180" height="56" rx="8"/>
+  </g>
+  <g fill="#111827" text-anchor="middle">
+    <text x="85" y="84">Tag</text><text x="85" y="103" font-size="12" fill="#374151">UpgradeState=Pending</text>
+    <text x="255" y="84">Preflight</text><text x="255" y="103" font-size="12" fill="#374151">19 checks, read-only</text>
+    <text x="425" y="84">Snapshot</text><text x="425" y="103" font-size="12" fill="#374151">incremental, rollback</text>
+    <text x="595" y="84">Media</text><text x="595" y="103" font-size="12" fill="#374151">hidden image → disk</text>
+    <text x="790" y="84">Setup</text><text x="790" y="103" font-size="12" fill="#374151">scheduled task, SYSTEM</text>
+  </g>
+  <g stroke="#6b7280" stroke-width="1.5" marker-end="url(#a)" fill="none">
+    <path d="M150,88 L190,88"/><path d="M320,88 L360,88"/><path d="M490,88 L530,88"/><path d="M660,88 L700,88"/>
+  </g>
+  <!-- state under start lane -->
+  <g font-size="12" fill="#6b7280" text-anchor="middle">
+    <text x="425" y="136">→ SnapshotCreated</text>
+    <text x="790" y="136">→ UpgradeStarted + UpgradeStartedAt</text>
+  </g>
+  <!-- check lane -->
+  <g stroke="#0078d4" stroke-width="1.5" fill="#eff6ff">
+    <rect x="20" y="200" width="200" height="56" rx="8"/>
+    <rect x="260" y="200" width="200" height="56" rx="8"/>
+  </g>
+  <g stroke="#16a34a" stroke-width="1.5" fill="#f0fdf4"><rect x="520" y="182" width="170" height="48" rx="8"/></g>
+  <g stroke="#dc2626" stroke-width="1.5" fill="#fef2f2"><rect x="520" y="238" width="170" height="48" rx="8"/></g>
+  <g stroke="#0078d4" stroke-width="1.5" fill="#eff6ff"><rect x="730" y="200" width="150" height="56" rx="8"/></g>
+  <g fill="#111827" text-anchor="middle">
+    <text x="120" y="224">Read the guest</text><text x="120" y="243" font-size="12" fill="#374151">build, Setup task, result</text>
+    <text x="360" y="224">Decide</text><text x="360" y="243" font-size="12" fill="#374151">build = target? task failed? timeout?</text>
+    <text x="605" y="211" fill="#166534">Completed</text><text x="605" y="266" fill="#991b1b">Failed + log excerpt</text>
+    <text x="805" y="224">Clean up</text><text x="805" y="243" font-size="12" fill="#374151">media disk, task</text>
+  </g>
+  <g stroke="#6b7280" stroke-width="1.5" marker-end="url(#a)" fill="none">
+    <path d="M220,228 L260,228"/>
+    <path d="M460,222 L520,206"/><path d="M460,234 L520,262"/>
+    <path d="M690,206 L730,222"/><path d="M690,262 L730,234"/>
+    <path d="M360,200 C360,170 120,170 120,200" stroke-dasharray="4 3"/>
+  </g>
+  <text x="240" y="176" font-size="12" fill="#6b7280" text-anchor="middle">still running → InProgress, next job</text>
+</svg>
