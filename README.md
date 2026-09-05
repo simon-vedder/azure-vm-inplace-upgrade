@@ -171,11 +171,13 @@ Same edition, same installation type, `64-bit`, `en-US` only. Standard and Datac
 Server Core. Windows Server *Azure Edition* is out of scope. The `verified` flag flips only in a
 pull request that names the lab run ([CONTRIBUTING.md](CONTRIBUTING.md)).
 
-**Engines.** `MediaDisk` creates a managed disk from Microsoft's hidden
+**Engines.** `MediaDisk` (default) creates a managed disk from Microsoft's hidden
 `MicrosoftWindowsServer/WindowsServerUpgrade/server2025Upgrade` image, attaches it and runs
-`setup.exe` from it. `FeatureUpdate` would use the Windows Update feature update for WS2019/2022;
-it is listed as experimental until a lab spike shows it can be triggered without a human
-([ADR 0006](docs/decisions/0006-two-engines-media-disk-first.md)).
+`setup.exe` from it. `FeatureUpdate` (experimental, `Start -Engine FeatureUpdate`, WS2019/2022 only)
+opts the guest in, finds the Windows Server 2025 feature update through the Windows Update Agent
+and installs it from a scheduled task, no media disk involved. Both reached build 26100 in the
+lab; the feature update took about two hours where the media disk took 37 minutes
+([ADR 0006](docs/decisions/0006-two-engines-media-disk-first.md), [KNOWN-ISSUES.md](KNOWN-ISSUES.md)).
 
 ## Verified
 
@@ -188,6 +190,7 @@ Three lab runs on 2026-09-05 with `Invoke-InPlaceUpgrade`, fresh Marketplace VMs
 | `2022-datacenter-core-g2` | 3, Datacenter (Core) | 23 min | Completed, still Server Core, no `explorer.exe` |
 | `2016-datacenter-gensecond` | 4, Datacenter (Desktop Experience) | 42 min | Completed, 24H2 |
 | `2019-datacenter-gensecond` | 4, Datacenter (Desktop Experience) | 43 min | Completed, driven by the Automation runbook, six telemetry records |
+| `2022-datacenter-g2`, FeatureUpdate spike | Windows Update feature update, no media | ~2 h | build 26100.33296; the engine in the module is derived from this spike, its own end-to-end run is in progress |
 
 The 2016 guest's older DISM reports the image name as `Windows Server 2025 SERVERDATACENTER`
 instead of `Datacenter (Desktop Experience)`; the selection matches `EditionId` and
@@ -273,7 +276,7 @@ tests/                       Pester
    MediaDisk engine; 2022 → 2025 (Desktop Experience and Core) and 2016 → 2025 verified in the lab.
 4. ✅ Runbook wrapper, `Start` / `Check` modes.
 5. ✅ Bicep: Automation Account, custom role, module import, schedules; deployed and driven end to end in the lab.
-6. FeatureUpdate spike.
+6. ✅ FeatureUpdate spike: the feature update installs unattended through the Windows Update Agent with `Commit()` before the restart; engine implemented as experimental.
 7. ✅ Log Analytics table + workbook; six records for one upgrade verified end to end. Deploy-to-Azure button pending.
 8. Lab: 2012 R2 → 2025, the 2022 and 2019 targets, Trusted Launch, the FeatureUpdate engine.
 9. PowerShell Gallery release.

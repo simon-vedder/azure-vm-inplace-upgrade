@@ -1,6 +1,6 @@
 # 0006 — Two upgrade engines behind one state machine, media disk first
 
-**Status:** proposed · 2026-09-04
+**Status:** accepted · 2026-09-05 (spike verified both engines)
 
 ## Context
 
@@ -24,6 +24,17 @@ proven and covers the end-of-life population (2016 → 2025). `FeatureUpdate` is
 *experimental* and gets a lab spike: can the feature update be found, installed and rebooted from a
 scheduled task without a human? If yes, it becomes the default for 2019/2022. If no, it stays
 documented as manual-only.
+
+## What the lab showed (2026-09-05)
+
+Both engines reach build 26100 on a `2022-datacenter-g2` Marketplace VM. MediaDisk took 37
+minutes from Setup start; FeatureUpdate took about two hours (15 min download, 88 min install
+through the Windows Update Agent, 4 min commit, 4 min offline). FeatureUpdate needs no media disk
+and no `install.wim` image selection, but it needs Windows Update reachability, the March 2026
+cumulative update, the policy opt-in, a search with `DeploymentAction='OptionalInstallation'`
+and, crucially, `Commit()` before the restart. MediaDisk stays the default; FeatureUpdate is the
+alternative for guests that must not get a data disk attached or that sit on plain Windows
+Update anyway.
 
 ## Consequences
 

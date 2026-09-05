@@ -37,6 +37,10 @@ All notable changes to this project are documented here. The format follows
   treated as Setup failures.
 
 ### Verified
+- 2026-09-05: **Windows Server 2025 feature update installed unattended** on a 2022 Marketplace
+  VM through the Windows Update Agent (policy opt-in, `DeploymentAction='OptionalInstallation'`
+  search, download, install, `Commit(0)`, orchestrator restart): build 26100.33296 after about
+  two hours. Basis of the experimental `FeatureUpdate` engine.
 - 2026-09-05: **Windows Server 2019 Datacenter → 2025 through the Automation runbook with
   telemetry**: Start job, three scheduled Check jobs, Completed after 43 minutes; six records in
   `InPlaceUpgrade_CL` from NotEligible (pending reboot on the fresh VM) to Completed.

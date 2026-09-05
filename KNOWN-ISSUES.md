@@ -145,9 +145,17 @@ documented by Microsoft. Each entry says which. "To verify" means it is on the l
   Update Agent does not return the feature update, but
   `IsInstalled=0 and DeploymentAction='OptionalInstallation'` returns **Windows Server 2025**
   (category Upgrades, `EulaAccepted=True`, `CanRequestUserInput=False`, reboot required) once the
-  opt-in key is set and the March 2026 CU or later is installed. `Microsoft.Update.Session` can
-  download and install it from a SYSTEM scheduled task. Result of the install is on the lab list;
-  the `FeatureUpdate` engine stays experimental until it is.
+  opt-in key is set and the March 2026 CU or later is installed. `Microsoft.Update.Session` downloads
+  and installs it from a SYSTEM scheduled task. *(verified 2026-09-05: build 26100.33296 after
+  download 15 min, install 88 min, commit 4 min, offline phase 4 min; the media disk did the
+  same upgrade in 37 minutes.)*
+- **`Install()` only stages the feature update; `Restart-Computer` afterwards reboots without
+  applying it.** *(observed, 2026-09-05)* The guest came back on the old build twice, with
+  `0x80242014` (post-reboot operation still pending) in the update history. What works:
+  `IUpdateInstaller4.Commit(0)` on an installer whose `Updates` collection holds the update
+  (a fresh installer without it answers `0x80240004`), then a restart through the update
+  orchestrator (`UsoClient RestartDevice`, `shutdown /r` as fallback). Commit itself ran four
+  minutes. The engine's worker does exactly this.
 
 ## Rollback
 
