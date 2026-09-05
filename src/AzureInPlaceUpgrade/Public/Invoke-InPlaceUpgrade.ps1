@@ -54,6 +54,12 @@ function Invoke-InPlaceUpgrade {
     .PARAMETER PollIntervalSeconds
     Seconds between two guest checks.
 
+    .PARAMETER LogIngestionEndpoint
+    Logs ingestion endpoint for telemetry; see Start-InPlaceUpgrade.
+
+    .PARAMETER DataCollectionRuleId
+    Immutable id of the data collection rule; see Start-InPlaceUpgrade.
+
     .EXAMPLE
     # End to end on one lab VM, five-hour budget, checking every two minutes
     Invoke-InPlaceUpgrade -ResourceGroupName rg-ipu-lab-weu -Name vm-ipu-2022-01 -TimeoutMinutes 300 -Confirm:$false -Verbose
@@ -128,7 +134,13 @@ function Invoke-InPlaceUpgrade {
 
         [Parameter()]
         [ValidateRange(30, 900)]
-        [int]$PollIntervalSeconds = 120
+        [int]$PollIntervalSeconds = 120,
+
+        [Parameter()]
+        [string]$LogIngestionEndpoint,
+
+        [Parameter()]
+        [string]$DataCollectionRuleId
     )
 
     process {
@@ -154,6 +166,8 @@ function Invoke-InPlaceUpgrade {
         if ($MediaDiskResourceGroupName) { $startParams['MediaDiskResourceGroupName'] = $MediaDiskResourceGroupName }
         if ($ProductKey) { $startParams['ProductKey'] = $ProductKey }
         if ($TargetImageIndex) { $startParams['TargetImageIndex'] = $TargetImageIndex }
+        if ($LogIngestionEndpoint) { $startParams['LogIngestionEndpoint'] = $LogIngestionEndpoint }
+        if ($DataCollectionRuleId) { $startParams['DataCollectionRuleId'] = $DataCollectionRuleId }
 
         $start = Start-InPlaceUpgrade -VM $VM @startParams
         if ($start.Result -ne 'Started') {
@@ -167,7 +181,8 @@ function Invoke-InPlaceUpgrade {
         while ((Get-Date) -lt $deadline) {
             Start-Sleep -Seconds $PollIntervalSeconds
             $fresh = Get-AzVM -ResourceGroupName $rg -Name $vmName -ErrorAction Stop
-            $check = Complete-InPlaceUpgrade -VM $fresh -TimeoutMinutes $TimeoutMinutes -KeepMediaDisk:$KeepMediaDisk -Confirm:$false
+            $check = Complete-InPlaceUpgrade -VM $fresh -TimeoutMinutes $TimeoutMinutes -KeepMediaDisk:$KeepMediaDisk -Confirm:$false `
+                -LogIngestionEndpoint $LogIngestionEndpoint -DataCollectionRuleId $DataCollectionRuleId
             Write-Verbose ("[{0}] {1:HH:mm:ss} {2}: {3}" -f $vmName, (Get-Date), $check.Result, $check.Reason)
             if ($check.Result -in @('Completed', 'Failed', 'Skipped')) { return $check }
         }

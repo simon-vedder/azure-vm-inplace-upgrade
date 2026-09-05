@@ -19,6 +19,9 @@ What it creates:
 | Resource group `rg-inplaceupgrade-weu` | everything below |
 | Automation Account, system-assigned identity, local auth disabled | runs the runbook |
 | Log Analytics workspace + diagnostic settings | job logs and streams |
+| Custom table `InPlaceUpgrade_CL`, data collection endpoint + rule, *Monitoring Metrics Publisher* for the identity | one record per state transition, written by the module |
+| Automation variables `InPlaceUpgrade-LogIngestionEndpoint` / `-DataCollectionRuleId` | the runbook reads them; job schedules are immutable, variables are not |
+| Workbook *In-place upgrades* | VMs by state, latest record per VM, failures, durations, activity |
 | Module `AzureInPlaceUpgrade` (PowerShell 7.2 runtime, uses the runtime's global Az bundle) | the engine |
 | Runbook `Invoke-InPlaceUpgradeRunbook` (PowerShell 7.2) | the thin wrapper from `src/runbooks/` |
 | Schedule `inplaceupgrade-check`, every 20 minutes, linked | finishes running upgrades |
@@ -31,7 +34,9 @@ until you redeploy with `startScheduleEnabled=true`, and even then only VMs tagg
 `UpgradeState=Pending` are touched.
 
 Before the first Gallery release, point `modulePackageUri` at a GitHub release asset (a zip of
-`src/AzureInPlaceUpgrade`) and `runbookContentUri` at the raw runbook URL of a tag.
+`src/AzureInPlaceUpgrade`) and `runbookContentUri` at the raw runbook URL of a tag. When the content
+behind an unchanged URI changes, bump `contentVersion` (defaults to `moduleVersion`): Automation
+only re-imports a module or re-publishes a runbook when the version stamp on the link changes.
 
 ## Lab
 

@@ -29,6 +29,13 @@ function Complete-InPlaceUpgrade {
     .PARAMETER KeepMediaDisk
     Keep the media disk after a final state. Costs money; useful when debugging.
 
+    .PARAMETER LogIngestionEndpoint
+    Logs ingestion endpoint of a data collection endpoint. With -DataCollectionRuleId, every
+    evaluation (InProgress, Completed, Failed) is written to the InPlaceUpgrade_CL table.
+
+    .PARAMETER DataCollectionRuleId
+    Immutable id (dcr-...) of the data collection rule that routes Custom-InPlaceUpgrade_CL.
+
     .EXAMPLE
     # Evaluate every VM that Start left in UpgradeStarted
     Get-InPlaceUpgradeCandidate -State UpgradeStarted | Complete-InPlaceUpgrade |
@@ -73,7 +80,13 @@ function Complete-InPlaceUpgrade {
         [int]$TimeoutMinutes = 240,
 
         [Parameter()]
-        [switch]$KeepMediaDisk
+        [switch]$KeepMediaDisk,
+
+        [Parameter()]
+        [string]$LogIngestionEndpoint,
+
+        [Parameter()]
+        [string]$DataCollectionRuleId
     )
 
     process {
@@ -178,6 +191,15 @@ function Complete-InPlaceUpgrade {
                 }
             }
         }
+
+        $recordState = switch ($decision.Result) { 'Completed' { $script:State.Completed } 'Failed' { $script:State.Failed } default { $script:State.UpgradeStarted } }
+        $record = ConvertTo-UpgradeRecord -VMName $vmName -ResourceGroupName $rg -State $recordState -Result $decision.Result -Reason $decision.Reason `
+            -Target $targetObject.Name -Engine 'MediaDisk' -TargetBuild $targetObject.TargetBuild `
+            -SourceBuild $(if ($status) { $status.Build } else { $null }) -DurationMinutes $decision.AgeMinutes `
+            -TaskResult $(if ($status -and $null -ne $status.TaskResult) { '0x{0:X8}' -f [uint32]$status.TaskResult } else { '' }) `
+            -Snapshot $(if ($snapshotName) { $snapshotName } else { '' }) -MediaDisk $(if ($mediaRef) { $mediaRef } else { '' }) -Mode 'Check' `
+            -LogExcerpt $(if ($logExcerpt) { $logExcerpt } else { '' })
+        $null = Write-UpgradeRecord -Record $record -LogIngestionEndpoint $LogIngestionEndpoint -DataCollectionRuleId $DataCollectionRuleId
 
         return ConvertTo-CompleteResult $decision.Result $decision.Reason
     }

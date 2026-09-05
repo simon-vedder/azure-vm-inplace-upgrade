@@ -50,6 +50,13 @@ Preflight only, change nothing.
 .PARAMETER ManagedIdentityClientId
 Client ID of a user-assigned managed identity. Leave empty for the system-assigned identity.
 
+.PARAMETER LogIngestionEndpoint
+Logs ingestion endpoint of the data collection endpoint. Empty falls back to the Automation
+variable InPlaceUpgrade-LogIngestionEndpoint that main.bicep maintains; no variable disables telemetry.
+
+.PARAMETER DataCollectionRuleId
+Immutable id of the data collection rule deployed with main.bicep.
+
 .EXAMPLE
 # Schedule 1, once per maintenance window: start up to three Ring0 upgrades
 .\Invoke-InPlaceUpgradeRunbook.ps1 -SubscriptionId '<subscription id>' -Mode Start -Ring Ring0 -MaxParallel 3
@@ -113,7 +120,13 @@ param(
     [bool]$DryRun = $false,
 
     [Parameter()]
-    [string]$ManagedIdentityClientId
+    [string]$ManagedIdentityClientId,
+
+    [Parameter()]
+    [string]$LogIngestionEndpoint,
+
+    [Parameter()]
+    [string]$DataCollectionRuleId
 )
 
 $ErrorActionPreference = 'Stop'
@@ -121,11 +134,18 @@ $ErrorActionPreference = 'Stop'
 Import-Module Az.Accounts -ErrorAction Stop
 Import-Module AzureInPlaceUpgrade -ErrorAction Stop
 
+# Telemetry target: explicit parameters win, otherwise the Automation variables deploy/main.bicep
+# maintains. Get-AutomationVariable only exists inside the sandbox; local runs pass parameters.
+if (-not $LogIngestionEndpoint -and (Get-Command Get-AutomationVariable -ErrorAction SilentlyContinue)) {
+    $LogIngestionEndpoint = [string](Get-AutomationVariable -Name 'InPlaceUpgrade-LogIngestionEndpoint' -ErrorAction SilentlyContinue)
+    $DataCollectionRuleId = [string](Get-AutomationVariable -Name 'InPlaceUpgrade-DataCollectionRuleId' -ErrorAction SilentlyContinue)
+}
+
 $connect = @{ Identity = $true; ErrorAction = 'Stop' }
 if ($ManagedIdentityClientId) { $connect['AccountId'] = $ManagedIdentityClientId.Trim() }
 $null = Connect-AzAccount @connect
 $context = Set-AzContext -SubscriptionId $SubscriptionId.Trim() -ErrorAction Stop
-Write-Output "Subscription: $($context.Subscription.Name) | Mode: $Mode | Scope: $(if ($ResourceGroupName) { $ResourceGroupName } else { 'subscription' }) | Target: $(if ($Target) { $Target } else { 'any' }) | Ring: $(if ($Ring) { $Ring } else { 'any' }) | DryRun: $DryRun"
+Write-Output "Subscription: $($context.Subscription.Name) | Mode: $Mode | Scope: $(if ($ResourceGroupName) { $ResourceGroupName } else { 'subscription' }) | Target: $(if ($Target) { $Target } else { 'any' }) | Ring: $(if ($Ring) { $Ring } else { 'any' }) | DryRun: $DryRun | Telemetry: $(if ($LogIngestionEndpoint -and $DataCollectionRuleId) { 'on' } else { 'off' })"
 
 $scope = @{}
 if ($ResourceGroupName) { $scope['ResourceGroupName'] = $ResourceGroupName.Trim() }
@@ -147,7 +167,8 @@ if ($Mode -eq 'Start') {
         $pending = @(Get-InPlaceUpgradeCandidate @scope -State 'Pending' | Sort-Object Name | Select-Object -First $slots)
         Write-Output "Pending and selected: $(if ($pending.Count) { ($pending.Name -join ', ') } else { 'none' })"
         foreach ($vm in $pending) {
-            $result = Start-InPlaceUpgrade -VM $vm -UseMatrixProductKey:$UseMatrixProductKey -Confirm:$false -WhatIf:$DryRun
+            $result = Start-InPlaceUpgrade -VM $vm -UseMatrixProductKey:$UseMatrixProductKey -Confirm:$false -WhatIf:$DryRun `
+                -LogIngestionEndpoint $LogIngestionEndpoint -DataCollectionRuleId $DataCollectionRuleId
             Write-Output "[$($vm.Name)] $($result.Result): $($result.Reason)"
             Add-Summary $result.Result
             $result
@@ -158,7 +179,8 @@ else {
     $started = @(Get-InPlaceUpgradeCandidate @scope -State 'UpgradeStarted')
     Write-Output "Evaluating: $(if ($started.Count) { ($started.Name -join ', ') } else { 'none' })"
     foreach ($vm in $started) {
-        $result = Complete-InPlaceUpgrade -VM $vm -TimeoutMinutes $TimeoutMinutes -Confirm:$false -WhatIf:$DryRun
+        $result = Complete-InPlaceUpgrade -VM $vm -TimeoutMinutes $TimeoutMinutes -Confirm:$false -WhatIf:$DryRun `
+            -LogIngestionEndpoint $LogIngestionEndpoint -DataCollectionRuleId $DataCollectionRuleId
         Write-Output "[$($vm.Name)] $($result.Result): $($result.Reason)"
         if ($result.LogExcerpt) { Write-Output $result.LogExcerpt }
         Add-Summary $result.Result

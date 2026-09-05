@@ -23,6 +23,8 @@ BeforeAll {
             FromStamp    = Get-Command ConvertFrom-TagTimestamp
             WimParse     = Get-Command ConvertFrom-GuestWimImage
             SelectImage  = Get-Command Select-UpgradeImageIndex
+            NewRecord    = Get-Command ConvertTo-UpgradeRecord
+            WriteRecord  = Get-Command Write-UpgradeRecord
         }
     }
 
@@ -410,6 +412,30 @@ Describe 'Image selection (Select-UpgradeImageIndex)' {
         $twice = @($wim.Images[3], $wim.Images[3])
         & $Private.SelectImage -Image $twice -EditionId 'ServerDatacenter' -InstallationType 'Server' | Should -BeNullOrEmpty
         & $Private.SelectImage -Image @() -EditionId 'ServerDatacenter' -InstallationType 'Server' | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Telemetry records' {
+    It 'builds a record with a stable shape and ISO timestamp' {
+        $at = [datetime]::new(2026, 9, 5, 12, 0, 0, [System.DateTimeKind]::Utc)
+        $r = & $Private.NewRecord -VMName 'vm-a' -ResourceGroupName 'rg-a' -State 'UpgradeStarted' -Result 'Started' -Reason 'Setup started.' -Target 'WS2025' -Engine 'MediaDisk' -SourceBuild 20348 -TargetBuild 26100 -ImageIndex 4 -Mode 'Start' -TimeGenerated $at
+        $r.TimeGenerated | Should -Be '2026-09-05T12:00:00.0000000Z'
+        $r.State | Should -Be 'UpgradeStarted'
+        $r.ImageIndex | Should -Be 4
+        $r.DurationMinutes | Should -BeNullOrEmpty
+        $r.ModuleVersion | Should -Be '0.2.0'
+        @($r.PSObject.Properties.Name) | Should -Contain 'LogExcerpt'
+    }
+
+    It 'caps free text so a record never exceeds the ingestion limits' {
+        $r = & $Private.NewRecord -VMName 'vm-a' -ResourceGroupName 'rg-a' -State 'Failed' -Result 'Failed' -Reason ('x' * 5000) -LogExcerpt ('y' * 9000)
+        $r.Reason.Length | Should -Be 1000
+        $r.LogExcerpt.Length | Should -Be 4000
+    }
+
+    It 'writes nothing without an endpoint and reports false' {
+        $r = & $Private.NewRecord -VMName 'vm-a' -ResourceGroupName 'rg-a' -State 'Completed' -Result 'Completed'
+        & $Private.WriteRecord -Record $r -LogIngestionEndpoint '' -DataCollectionRuleId '' | Should -BeFalse
     }
 }
 

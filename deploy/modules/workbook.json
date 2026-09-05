@@ -1,0 +1,97 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "## In-place upgrades\nOne record per state transition, written by the `AzureInPlaceUpgrade` module through the Logs Ingestion API. The **State** is what the `UpgradeState` tag says; the **Result** is what the job decided."
+      },
+      "name": "title"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "InPlaceUpgrade_CL\n| summarize arg_max(TimeGenerated, *) by VMName\n| summarize VMs = count() by State\n| order by State asc",
+        "size": 4,
+        "title": "VMs by current state",
+        "timeContext": { "durationMs": 2592000000 },
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [ "{workspaceId}" ],
+        "visualization": "tiles",
+        "tileSettings": {
+          "titleContent": { "columnMatch": "State", "formatter": 1 },
+          "leftContent": { "columnMatch": "VMs", "formatter": 12, "formatOptions": { "palette": "auto" } },
+          "showBorder": true
+        }
+      },
+      "name": "states"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "InPlaceUpgrade_CL\n| summarize arg_max(TimeGenerated, *) by VMName\n| project TimeGenerated, VMName, ResourceGroupName, Target, State, Result, SourceBuild, TargetBuild, Engine, ImageIndex, DurationMinutes, TaskResult, Snapshot\n| order by TimeGenerated desc",
+        "size": 0,
+        "title": "Latest record per VM",
+        "timeContext": { "durationMs": 2592000000 },
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [ "{workspaceId}" ],
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "State", "formatter": 18, "formatOptions": { "thresholdsOptions": "colors", "thresholdsGrid": [ { "operator": "==", "thresholdValue": "Completed", "representation": "green", "text": "{0}{1}" }, { "operator": "==", "thresholdValue": "Failed", "representation": "redBright", "text": "{0}{1}" }, { "operator": "==", "thresholdValue": "UpgradeStarted", "representation": "blue", "text": "{0}{1}" }, { "operator": "Default", "thresholdValue": null, "representation": "gray", "text": "{0}{1}" } ] } }
+          ]
+        }
+      },
+      "name": "latest"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "InPlaceUpgrade_CL\n| where Result == 'Failed' or Result == 'NotEligible'\n| project TimeGenerated, VMName, Result, Mode, TaskResult, Reason\n| order by TimeGenerated desc",
+        "size": 0,
+        "title": "Failures and refused preflights",
+        "timeContext": { "durationMs": 2592000000 },
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [ "{workspaceId}" ]
+      },
+      "name": "failures"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "InPlaceUpgrade_CL\n| where Result == 'Completed'\n| project TimeGenerated, VMName, SourceBuild, TargetBuild, DurationMinutes\n| order by TimeGenerated desc",
+        "size": 0,
+        "title": "Completed upgrades and how long Setup took",
+        "timeContext": { "durationMs": 2592000000 },
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [ "{workspaceId}" ],
+        "visualization": "table"
+      },
+      "name": "durations"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "InPlaceUpgrade_CL\n| summarize Records = count() by bin(TimeGenerated, 15m), Result\n| order by TimeGenerated asc",
+        "size": 0,
+        "title": "Activity over time",
+        "timeContext": { "durationMs": 2592000000 },
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [ "{workspaceId}" ],
+        "visualization": "barchart"
+      },
+      "name": "timeline"
+    }
+  ],
+  "fallbackResourceIds": [ "{workspaceId}" ],
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}

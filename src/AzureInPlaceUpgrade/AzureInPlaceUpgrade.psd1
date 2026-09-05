@@ -1,6 +1,6 @@
 @{
     RootModule           = 'AzureInPlaceUpgrade.psm1'
-    ModuleVersion        = '0.1.0'
+    ModuleVersion        = '0.2.0'
     CompatiblePSEditions = @('Core')
     GUID                 = 'd93feeee-c72c-4b2a-b0aa-d11b68ed20b8'
     Author               = 'Simon Vedder'

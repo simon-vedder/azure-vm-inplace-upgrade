@@ -22,6 +22,9 @@ param logRetentionDays int = 90
 @description('AzureInPlaceUpgrade module version on the PowerShell Gallery.')
 param moduleVersion string
 
+@description('Version stamp written to the module and runbook content links. Defaults to moduleVersion; bump it to force Automation to re-import unchanged URIs.')
+param contentVersion string = ''
+
 @description('Override the module package source, for example a GitHub release asset before the first Gallery release. Empty means the Gallery URL for moduleVersion.')
 param modulePackageUri string = ''
 
@@ -83,6 +86,7 @@ module automation 'modules/automation.bicep' = {
     tags: tags
     modulePackageUri: effectiveModuleUri
     runbookContentUri: runbookContentUri
+    contentVersion: empty(contentVersion) ? moduleVersion : contentVersion
     subscriptionIdForJobs: subscription().subscriptionId
     ring: ring
     maxParallel: maxParallel
@@ -155,3 +159,5 @@ output automationAccountId string = automation.outputs.automationAccountId
 output principalId string = automation.outputs.principalId
 output roleDefinitionId string = operatorRole.id
 output workspaceId string = automation.outputs.workspaceId
+output logIngestionEndpoint string = automation.outputs.logIngestionEndpoint
+output dataCollectionRuleId string = automation.outputs.dataCollectionRuleId

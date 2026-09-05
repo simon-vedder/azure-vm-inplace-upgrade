@@ -68,6 +68,14 @@ function Start-InPlaceUpgrade {
     .PARAMETER KeepMediaDisk
     Keep the media disk when Start fails. Useful when debugging a Setup that dies immediately.
 
+    .PARAMETER LogIngestionEndpoint
+    Logs ingestion endpoint of a data collection endpoint (https://...ingest.monitor.azure.com).
+    Together with -DataCollectionRuleId, every state transition is written to the
+    InPlaceUpgrade_CL table. Empty means no telemetry.
+
+    .PARAMETER DataCollectionRuleId
+    Immutable id (dcr-...) of the data collection rule that routes Custom-InPlaceUpgrade_CL.
+
     .EXAMPLE
     # Start the upgrade of one tagged VM interactively (prompts before the snapshot)
     Start-InPlaceUpgrade -ResourceGroupName rg-apps-prod-weu -Name vm-app-prod-weu-01
@@ -146,7 +154,13 @@ function Start-InPlaceUpgrade {
         [switch]$Force,
 
         [Parameter()]
-        [switch]$KeepMediaDisk
+        [switch]$KeepMediaDisk,
+
+        [Parameter()]
+        [string]$LogIngestionEndpoint,
+
+        [Parameter()]
+        [string]$DataCollectionRuleId
     )
 
     process {
@@ -161,12 +175,24 @@ function Start-InPlaceUpgrade {
         $targetObject = Get-InPlaceUpgradeTarget -Name $targetName
         $targetName = $targetObject.Name
 
+        # Captured for the nested helpers below; the analyzer cannot see parameter use inside them.
+        $logEndpoint = $LogIngestionEndpoint
+        $logRuleId = $DataCollectionRuleId
         $readiness = $null
         $snapshotName = $null
         $mediaDiskRg = if ($MediaDiskResourceGroupName) { $MediaDiskResourceGroupName } else { $rg }
         $mediaDiskName = Get-UpgradeMediaDiskName -VMName $vmName -Target $targetName
         $setupPath = $null
         $startedAt = $null
+
+        function Write-StartRecord {
+            param([string]$State, [string]$Result, [string]$Reason, [nullable[int]]$ImageIndex)
+            $record = ConvertTo-UpgradeRecord -VMName $vmName -ResourceGroupName $rg -State $State -Result $Result -Reason $Reason `
+                -Target $targetName -Engine $Engine -TargetBuild $targetObject.TargetBuild `
+                -SourceBuild $(if ($readiness) { $readiness.SourceBuild } else { $null }) -ImageIndex $ImageIndex `
+                -Snapshot $(if ($snapshotName) { $snapshotName } else { '' }) -MediaDisk $(if ($snapshotName) { "$mediaDiskRg/$mediaDiskName" } else { '' }) -Mode 'Start'
+            $null = Write-UpgradeRecord -Record $record -LogIngestionEndpoint $logEndpoint -DataCollectionRuleId $logRuleId
+        }
 
         function ConvertTo-StartResult {
             param([string]$Result, [string]$Reason)
@@ -201,7 +227,10 @@ function Start-InPlaceUpgrade {
         }
         if ($readiness.Decision -eq 'NotEligible') {
             $failed = ($readiness.Checks | Where-Object { $_.Result -eq 'Fail' } | ForEach-Object { "$($_.Name): $($_.Detail)" }) -join ' | '
-            if (-not $Force) { return ConvertTo-StartResult 'NotEligible' $failed }
+            if (-not $Force) {
+                Write-StartRecord -State $script:State.Pending -Result 'NotEligible' -Reason $failed
+                return ConvertTo-StartResult 'NotEligible' $failed
+            }
             Write-Warning "[$vmName] Proceeding despite failed preflight checks (-Force): $failed"
         }
         elseif ($readiness.Engine -ne $Engine -and -not $Force) {
@@ -246,6 +275,7 @@ function Start-InPlaceUpgrade {
                 Write-Verbose "[$vmName] Snapshot '$snapshotName' created."
             }
             Set-UpgradeTag -ResourceId $VM.Id -Tag @{ $tagState = $script:State.SnapshotCreated; $tagSnapshot = $snapshotName }
+            Write-StartRecord -State $script:State.SnapshotCreated -Result 'SnapshotCreated' -Reason "Snapshot $snapshotName"
 
             $disk = New-UpgradeMediaDisk -VM $VM -DiskName $mediaDiskName -DiskResourceGroupName $mediaDiskRg -MediaEngine $mediaEngine -SkuName $MediaDiskSkuName
             Set-UpgradeTag -ResourceId $VM.Id -Tag @{ $tagMediaDisk = "$mediaDiskRg/$mediaDiskName" }
@@ -283,6 +313,7 @@ function Start-InPlaceUpgrade {
 
             $startedAt = (Get-Date).ToUniversalTime()
             Set-UpgradeTag -ResourceId $VM.Id -Tag @{ $tagState = $script:State.UpgradeStarted; $tagStartedAt = (ConvertTo-TagTimestamp -Value $startedAt) }
+            Write-StartRecord -State $script:State.UpgradeStarted -Result 'Started' -Reason $launch.Reason -ImageIndex $imageIndex
 
             return ConvertTo-StartResult 'Started' $launch.Reason
         }
@@ -291,6 +322,7 @@ function Start-InPlaceUpgrade {
             Write-Verbose "[$vmName] Start failed: $reason"
             try { Set-UpgradeTag -ResourceId $VM.Id -Tag @{ $tagState = $script:State.Failed } }
             catch { Write-Warning "[$vmName] Could not set $tagState=Failed: $($_.Exception.Message)" }
+            Write-StartRecord -State $script:State.Failed -Result 'Failed' -Reason $reason
 
             if (-not $KeepMediaDisk) {
                 $cleanup = Remove-UpgradeMediaDisk -ResourceGroupName $rg -VMName $vmName -DiskResourceGroupName $mediaDiskRg -DiskName $mediaDiskName
