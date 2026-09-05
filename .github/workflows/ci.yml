@@ -71,12 +71,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Pinned: different Bicep versions emit different templates, which would make the drift
+      # check below fail for the wrong reason. Bump here and rebuild azuredeploy.json together.
+      - name: Install Bicep 0.46.1
+        run: az bicep install --version v0.46.1
+
       - name: Build and compare the compiled template
         run: |
           az bicep build -f deploy/main.bicep --outfile /tmp/azuredeploy.json
           az bicep build -f deploy/lab.bicep --stdout > /dev/null
-          if ! diff -q <(jq -S 'del(.metadata)' /tmp/azuredeploy.json) <(jq -S 'del(.metadata)' deploy/azuredeploy.json) > /dev/null; then
-            echo "deploy/azuredeploy.json is stale; run: az bicep build -f deploy/main.bicep --outfile deploy/azuredeploy.json"
+          strip='walk(if type == "object" then del(.metadata) | del(.templateHash) else . end)'
+          if ! diff -q <(jq -S "$strip" /tmp/azuredeploy.json) <(jq -S "$strip" deploy/azuredeploy.json) > /dev/null; then
+            echo "deploy/azuredeploy.json is stale; run: az bicep build -f deploy/main.bicep --outfile deploy/azuredeploy.json (Bicep 0.46.1)"
+            diff <(jq -S "$strip" /tmp/azuredeploy.json) <(jq -S "$strip" deploy/azuredeploy.json) | head -40
             exit 1
           fi
           echo "azuredeploy.json matches main.bicep"
