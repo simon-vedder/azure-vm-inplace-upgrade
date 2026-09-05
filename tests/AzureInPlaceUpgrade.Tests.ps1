@@ -106,6 +106,15 @@ Describe 'Module' {
     }
 }
 
+Describe 'FeatureUpdate launcher' {
+    It 'commits the staged update before restarting' {
+        $script = & $Private.GuestScript -Name FeatureUpdateLaunch
+        $script | Should -Match 'Commit\(0\)'
+        $script | Should -Match 'UsoClient\.exe'
+        $script | Should -Match "DeploymentAction|SearchCriteria"
+    }
+}
+
 Describe 'Target matrix' {
     BeforeAll { $targets = @(Get-InPlaceUpgradeTarget) }
 

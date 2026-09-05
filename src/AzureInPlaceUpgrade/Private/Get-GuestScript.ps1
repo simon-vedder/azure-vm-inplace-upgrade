@@ -270,7 +270,16 @@ try {
     `$ir = `$installer.Install()
     Write-Log ('install result ' + `$ir.ResultCode + ' hr 0x' + ('{0:X8}' -f `$ir.HResult) + ' reboot ' + `$ir.RebootRequired)
     if (`$ir.ResultCode -ne 2 -and `$ir.ResultCode -ne 3) { exit 1 }
-    if (`$ir.RebootRequired) { Write-Log 'rebooting'; Restart-Computer -Force }
+    if (`$ir.RebootRequired) {
+        # Install() only stages a feature update. Without Commit() the next restart is an ordinary
+        # one: the guest comes back on the old build with 0x80242014 in the update history.
+        # Commit needs the installer's Updates collection set and takes a few minutes.
+        Write-Log 'commit start'
+        `$installer.Commit(0)
+        Write-Log 'commit done, restarting through the update orchestrator'
+        Start-Process -FilePath "`$env:SystemRoot\System32\UsoClient.exe" -ArgumentList 'RestartDevice' -WindowStyle Hidden -ErrorAction SilentlyContinue
+        Start-Process -FilePath "`$env:SystemRoot\System32\shutdown.exe" -ArgumentList '/r /t 90 /c "Windows Server feature update (azure-vm-inplace-upgrade)"' -WindowStyle Hidden
+    }
 }
 catch { Write-Log ('error ' + `$_.Exception.Message); exit 1 }
 "@
