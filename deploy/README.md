@@ -47,9 +47,10 @@ az role assignment list --all --query "[?contains(roleDefinitionId, '$role')].id
 az role definition delete --name "Azure VM In-Place Upgrade Operator"
 ```
 
-Before the first Gallery release, point `modulePackageUri` at a GitHub release asset (a zip of
-`src/AzureInPlaceUpgrade`) and `runbookContentUri` at the raw runbook URL of a tag. When the content
-behind an unchanged URI changes, bump `contentVersion` (defaults to `moduleVersion`, must look like a `System.Version`, e.g. `0.2.0.7`): Automation
+`modulePackageUri` defaults to the PowerShell Gallery package for `moduleVersion` (for example
+`0.2.0-preview`); override it only for a private build, such as a GitHub release asset or a zip of
+`src/AzureInPlaceUpgrade` on a storage account. Pin `runbookContentUri` to the raw runbook URL of the
+matching tag in production. When the content behind an unchanged URI changes, bump `contentVersion` (defaults to `moduleVersion`, must look like a `System.Version`, e.g. `0.2.0.7`): Automation
 only re-imports a module or re-publishes a runbook when the version stamp on the link changes.
 
 ## Lab
