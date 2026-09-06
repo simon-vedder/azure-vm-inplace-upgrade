@@ -25,12 +25,17 @@ jobs:
           foreach ($m in 'Az.Accounts', 'Az.Compute', 'Az.Resources') { Install-Module $m -Force -Scope CurrentUser }
 
       - name: Tag must match the manifest version
+        id: manifest
         shell: pwsh
         run: |
           $manifest = Test-ModuleManifest ./src/AzureInPlaceUpgrade/AzureInPlaceUpgrade.psd1
           $tag = '${{ github.ref_name }}'.TrimStart('v')
           if ($tag -ne $manifest.Version.ToString()) { throw "Tag $tag does not match ModuleVersion $($manifest.Version)." }
-          Write-Host "Releasing $($manifest.Name) $($manifest.Version)"
+          $prerelease = [string]$manifest.PrivateData.PSData.Prerelease
+          $fullVersion = if ($prerelease) { "$($manifest.Version)-$prerelease" } else { $manifest.Version.ToString() }
+          "prerelease=$([bool]$prerelease)".ToLowerInvariant() | Out-File $env:GITHUB_OUTPUT -Append
+          "full_version=$fullVersion" | Out-File $env:GITHUB_OUTPUT -Append
+          Write-Host "Releasing $($manifest.Name) $fullVersion"
 
       - name: Analyze and test
         shell: pwsh
@@ -60,6 +65,8 @@ jobs:
       - name: GitHub release with the module zip and the runbook
         uses: softprops/action-gh-release@v2
         with:
+          name: AzureInPlaceUpgrade ${{ steps.manifest.outputs.full_version }}
+          prerelease: ${{ steps.manifest.outputs.prerelease == 'true' }}
           files: |
             dist/AzureInPlaceUpgrade.zip
             dist/Invoke-InPlaceUpgradeRunbook.ps1
