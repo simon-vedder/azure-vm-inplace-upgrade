@@ -6,18 +6,6 @@ $script:TargetMatrix = $null
 
 # Tag names are the public contract with the people who approve upgrades. Changing one is a
 # breaking change and goes through the CHANGELOG.
-$script:Tag = @{
-    Target    = 'UpgradeTarget'
-    Ring      = 'UpgradeRing'
-    State     = 'UpgradeState'
-    StartedAt = 'UpgradeStartedAt'
-    # Pointers to the artefacts of the current run. State, not history: they are overwritten by
-    # the next run and let Complete find what Start created without guessing names.
-    Snapshot  = 'UpgradeSnapshot'
-    MediaDisk = 'UpgradeMediaDisk'
-    Engine    = 'UpgradeEngine'
-}
-
 # Inside the guest: the scheduled task that runs Setup, and where /copylogs puts the logs.
 $script:GuestTaskName = 'AzureInPlaceUpgrade'
 $script:GuestLogDirectory = 'C:\Windows\Temp\AzureInPlaceUpgrade'

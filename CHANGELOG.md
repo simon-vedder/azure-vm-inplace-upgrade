@@ -5,6 +5,37 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0-preview] - 2026-09-06
+
+Breaking. The module no longer reads or writes Azure tags. Tags are an orchestration concern and
+now live entirely in the runbook, which is the thing that has to survive job boundaries.
+
+### Changed
+- `-Target` is mandatory on `Start-InPlaceUpgrade`, `Complete-InPlaceUpgrade`,
+  `Invoke-InPlaceUpgrade` and `Test-InPlaceUpgradeReadiness`. It no longer falls back to an
+  `UpgradeTarget` tag.
+- `Complete-InPlaceUpgrade` takes `-Snapshot`, `-MediaDisk`, `-StartedAt` and `-Engine` instead of
+  reading them off the VM. `Start-InPlaceUpgrade` returns all of them, plus a `ResumeCommand` string
+  it also prints, so the manual two-step needs no persistence.
+- `Start-InPlaceUpgrade` takes `-ReuseSnapshot` instead of finding a previous snapshot in a tag.
+- The runbook owns the tag vocabulary: it selects by `UpgradeTarget`, `UpgradeState` and
+  `UpgradeRing`, passes the target explicitly, and writes progress back with `Update-AzTag`.
+- A second `Start` on a running upgrade is stopped by the existing `SetupRunning` preflight check,
+  which observes the guest instead of trusting a tag.
+
+### Fixed
+- `Start-InPlaceUpgrade` put a Unix epoch number in the `ResumeCommand` while `-StartedAt` is a
+  `[datetime]`. An integer binds as ticks, so a pasted command set the start to year 1 and the next
+  Check declared an instant timeout. It now carries a quoted round-trip string.
+- The runbook stores `UpgradeStartedAt` as Unix seconds. Azure keeps an ISO string faithfully, but
+  `Get-AzVM` returns it re-serialised as `09/07/2026 09:11:41`: no zone, and `MM/dd` that a `dd/MM`
+  reader takes for another day. On a lab run that turned 41 minutes of age into 60 days.
+  `Get-AzResource` does not do this; `Get-AzVM` does.
+
+### Removed
+- `Get-InPlaceUpgradeCandidate`. Tag-based discovery is orchestration; the runbook does it with
+  `Get-AzVM` and a tag filter.
+
 ## [0.2.0-preview] - 2026-09-05
 
 ### Added

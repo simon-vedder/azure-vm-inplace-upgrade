@@ -1,12 +1,12 @@
 @{
     RootModule           = 'AzureInPlaceUpgrade.psm1'
-    ModuleVersion        = '0.2.0'
+    ModuleVersion        = '0.3.0'
     CompatiblePSEditions = @('Core')
     GUID                 = 'd93feeee-c72c-4b2a-b0aa-d11b68ed20b8'
     Author               = 'Simon Vedder'
     CompanyName          = 'Simon Vedder'
     Copyright            = '(c) 2026 Simon Vedder. MIT License.'
-    Description          = 'Tag-driven, unattended in-place Windows Server upgrades for Azure VMs: preflight, OS disk snapshot, detached Windows Setup, state tracking across Azure Automation jobs and in-guest validation.'
+    Description          = 'Unattended in-place Windows Server upgrades for Azure VMs, one by name or a tagged fleet from a runbook: preflight, OS disk snapshot, detached Windows Setup, state tracking across Azure Automation jobs and in-guest validation.'
     PowerShellVersion    = '7.2'
     # Minimums match the Az bundle the Azure Automation PowerShell 7.2 runtime ships by default
     # (Az 11.2.0). Importing newer Az.Accounts into an Automation Account next to the default one
@@ -18,7 +18,6 @@
     )
     FunctionsToExport    = @(
         'Complete-InPlaceUpgrade'
-        'Get-InPlaceUpgradeCandidate'
         'Get-InPlaceUpgradeTarget'
         'Invoke-InPlaceUpgrade'
         'Start-InPlaceUpgrade'

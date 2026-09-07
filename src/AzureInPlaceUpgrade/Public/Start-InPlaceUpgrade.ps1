@@ -24,7 +24,7 @@ function Start-InPlaceUpgrade {
     given; -WhatIf runs the preflight and stops before the snapshot.
 
     .PARAMETER VM
-    The VM object from Get-AzVM or Get-InPlaceUpgradeCandidate. Accepts pipeline input.
+    The VM object from Get-AzVM. Accepts pipeline input.
 
     .PARAMETER ResourceGroupName
     Resource group of the VM when -Name is used instead of -VM.
@@ -80,16 +80,17 @@ function Start-InPlaceUpgrade {
     Immutable id (dcr-...) of the data collection rule that routes Custom-InPlaceUpgrade_CL.
 
     .EXAMPLE
-    # Start the upgrade of one tagged VM interactively (prompts before the snapshot)
-    Start-InPlaceUpgrade -ResourceGroupName rg-apps-prod-weu -Name vm-app-prod-weu-01
+    # Upgrade one VM by name (prompts before the snapshot). No tags needed.
+    Start-InPlaceUpgrade -ResourceGroupName rg-apps-prod-weu -Name vm-app-prod-weu-01 -Target WS2025
 
     .EXAMPLE
-    # Start everything that is approved for Ring0, no prompts, with the matrix product key
-    Get-InPlaceUpgradeCandidate -Ring Ring0 | Start-InPlaceUpgrade -UseMatrixProductKey -Confirm:$false
+    # A fleet: the caller selects the VMs however it likes and passes the target per machine
+    Get-AzVM -ResourceGroupName rg-apps-prod-weu | Where-Object { $_.Tags.UpgradeState -eq 'Pending' } |
+        ForEach-Object { Start-InPlaceUpgrade -VM $_ -Target $_.Tags.UpgradeTarget -UseMatrixProductKey -Confirm:$false }
 
     .EXAMPLE
     # Preflight and plan only
-    Start-InPlaceUpgrade -ResourceGroupName rg-apps-prod-weu -Name vm-app-prod-weu-01 -WhatIf
+    Start-InPlaceUpgrade -ResourceGroupName rg-apps-prod-weu -Name vm-app-prod-weu-01 -Target WS2025 -WhatIf
 
     .INPUTS
     Microsoft.Azure.Commands.Compute.Models.PSVirtualMachine
@@ -124,8 +125,13 @@ function Start-InPlaceUpgrade {
         [Parameter(Mandatory, ParameterSetName = 'ByName')]
         [string]$Name,
 
-        [Parameter()]
+        [Parameter(Mandatory)]
         [string]$Target,
+
+        # Name of a snapshot from a previous attempt. Start used to find this in a tag; the caller
+        # passes it now, so the module never reads resource metadata.
+        [Parameter()]
+        [string]$ReuseSnapshot,
 
         [Parameter()]
         [ValidateSet('MediaDisk', 'FeatureUpdate')]
@@ -173,8 +179,7 @@ function Start-InPlaceUpgrade {
         $vmName = [string]$VM.Name
         $rg = [string]$VM.ResourceGroupName
 
-        $targetName = if ($Target) { $Target } else { Get-VMTagValue -VM $VM -Name $script:Tag.Target }
-        if (-not $targetName) { throw "VM '$vmName' has no '$($script:Tag.Target)' tag and no -Target was given." }
+        $targetName = $Target
         $targetObject = Get-InPlaceUpgradeTarget -Name $targetName
         $targetName = $targetObject.Name
 
@@ -212,15 +217,21 @@ function Start-InPlaceUpgrade {
                 SetupPath         = $setupPath
                 StartedAt         = $startedAt
                 Readiness         = $readiness
+                ResumeCommand     = if ($Result -eq 'Started') { Get-ResumeCommand } else { $null }
             }
         }
 
-        $state = Get-VMTagValue -VM $VM -Name $script:Tag.State
-        if ($state -ieq $script:State.UpgradeStarted) {
-            return ConvertTo-StartResult 'Skipped' "VM is already in state $($script:State.UpgradeStarted); evaluate it with Complete-InPlaceUpgrade."
-        }
-        if ($state -ieq $script:State.Completed) {
-            return ConvertTo-StartResult 'Skipped' "VM is in state $($script:State.Completed); set $($script:Tag.State)=Pending to run again."
+        # Nothing is written to the VM, so a human who comes back in 40 minutes needs these values.
+        # Invoke-InPlaceUpgrade avoids the question entirely by holding the state in the process.
+        function Get-ResumeCommand {
+            $parts = @(
+                "Complete-InPlaceUpgrade -ResourceGroupName $rg -Name $vmName -Target $targetName"
+                "-Engine $Engine"
+            )
+            if ($snapshotName) { $parts += "-Snapshot $snapshotName" }
+            if ($snapshotName -and $Engine -eq 'MediaDisk') { $parts += "-MediaDisk $mediaDiskRg/$mediaDiskName" }
+            if ($startedAt) { $parts += ("-StartedAt '" + $startedAt.ToUniversalTime().ToString('o') + "'") }
+            $parts -join ' '
         }
 
         Write-Verbose "[$vmName] Running the preflight."
@@ -267,19 +278,12 @@ function Start-InPlaceUpgrade {
             return ConvertTo-StartResult 'Skipped' 'WhatIf: preflight passed, nothing changed.'
         }
 
-        $tagState = $script:Tag.State
-        $tagSnapshot = $script:Tag.Snapshot
-        $tagMediaDisk = $script:Tag.MediaDisk
-        $tagStartedAt = $script:Tag.StartedAt
-        $tagEngine = $script:Tag.Engine
 
         try {
-            $existingSnapshot = Get-VMTagValue -VM $VM -Name $tagSnapshot
-            # A retry after SnapshotCreated or Failed keeps the snapshot of the state before the
-            # first attempt; that is the cleaner rollback point and saves a copy.
-            if ($state -in @($script:State.SnapshotCreated, $script:State.Failed) -and $existingSnapshot -and
-                (Get-AzSnapshot -ResourceGroupName $rg -SnapshotName $existingSnapshot -ErrorAction SilentlyContinue)) {
-                $snapshotName = $existingSnapshot
+            # A retry keeps the snapshot of the state before the first attempt; that is the cleaner
+            # rollback point and saves a copy. The caller names it with -ReuseSnapshot.
+            if ($ReuseSnapshot -and (Get-AzSnapshot -ResourceGroupName $rg -SnapshotName $ReuseSnapshot -ErrorAction SilentlyContinue)) {
+                $snapshotName = $ReuseSnapshot
                 Write-Verbose "[$vmName] Reusing snapshot '$snapshotName' from the previous attempt."
             }
             else {
@@ -287,7 +291,6 @@ function Start-InPlaceUpgrade {
                 $snapshotName = (New-VMOSSnapshot -VM $VM -Target $targetName).Name
                 Write-Verbose "[$vmName] Snapshot '$snapshotName' created."
             }
-            Set-UpgradeTag -ResourceId $VM.Id -Tag @{ $tagState = $script:State.SnapshotCreated; $tagSnapshot = $snapshotName; $tagEngine = $Engine }
             Write-StartRecord -State $script:State.SnapshotCreated -Result 'SnapshotCreated' -Reason "Snapshot $snapshotName"
 
             if ($Engine -eq 'FeatureUpdate') {
@@ -296,13 +299,11 @@ function Start-InPlaceUpgrade {
                 Write-Verbose "[$vmName] $($launch.Reason) $($launch.Raw)"
 
                 $startedAt = (Get-Date).ToUniversalTime()
-                Set-UpgradeTag -ResourceId $VM.Id -Tag @{ $tagState = $script:State.UpgradeStarted; $tagStartedAt = (ConvertTo-TagTimestamp -Value $startedAt) }
                 Write-StartRecord -State $script:State.UpgradeStarted -Result 'Started' -Reason $launch.Reason
                 return ConvertTo-StartResult 'Started' $launch.Reason
             }
 
             $disk = New-UpgradeMediaDisk -VM $VM -DiskName $mediaDiskName -DiskResourceGroupName $mediaDiskRg -MediaEngine $mediaEngine -SkuName $MediaDiskSkuName
-            Set-UpgradeTag -ResourceId $VM.Id -Tag @{ $tagMediaDisk = "$mediaDiskRg/$mediaDiskName" }
             $lun = Add-UpgradeMediaDisk -VM $VM -Disk $disk
             Write-Verbose "[$vmName] Media disk on LUN $lun."
 
@@ -336,16 +337,15 @@ function Start-InPlaceUpgrade {
             Write-Verbose "[$vmName] $($launch.Reason) $($launch.Raw)"
 
             $startedAt = (Get-Date).ToUniversalTime()
-            Set-UpgradeTag -ResourceId $VM.Id -Tag @{ $tagState = $script:State.UpgradeStarted; $tagStartedAt = (ConvertTo-TagTimestamp -Value $startedAt) }
             Write-StartRecord -State $script:State.UpgradeStarted -Result 'Started' -Reason $launch.Reason -ImageIndex $imageIndex
 
-            return ConvertTo-StartResult 'Started' $launch.Reason
+            $result = ConvertTo-StartResult 'Started' $launch.Reason
+            Write-Host "[$vmName] Setup started. Finish it with:`n  $($result.ResumeCommand)"
+            return $result
         }
         catch {
             $reason = $_.Exception.Message
             Write-Verbose "[$vmName] Start failed: $reason"
-            try { Set-UpgradeTag -ResourceId $VM.Id -Tag @{ $tagState = $script:State.Failed } }
-            catch { Write-Warning "[$vmName] Could not set $tagState=Failed: $($_.Exception.Message)" }
             Write-StartRecord -State $script:State.Failed -Result 'Failed' -Reason $reason
 
             if (-not $KeepMediaDisk -and $Engine -eq 'MediaDisk') {

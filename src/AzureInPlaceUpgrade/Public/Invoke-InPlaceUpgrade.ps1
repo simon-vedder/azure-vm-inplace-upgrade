@@ -10,7 +10,7 @@ function Invoke-InPlaceUpgrade {
     after three hours (ADR 0003); schedule Start and Complete separately there.
 
     .PARAMETER VM
-    The VM object from Get-AzVM or Get-InPlaceUpgradeCandidate. Accepts pipeline input.
+    The VM object from Get-AzVM. Accepts pipeline input.
 
     .PARAMETER ResourceGroupName
     Resource group of the VM when -Name is used instead of -VM.
@@ -62,7 +62,7 @@ function Invoke-InPlaceUpgrade {
 
     .EXAMPLE
     # End to end on one lab VM, five-hour budget, checking every two minutes
-    Invoke-InPlaceUpgrade -ResourceGroupName rg-ipu-lab-weu -Name vm-ipu-2022-01 -TimeoutMinutes 300 -Confirm:$false -Verbose
+    Invoke-InPlaceUpgrade -ResourceGroupName rg-ipu-lab-weu -Name vm-ipu-2022-01 -Target WS2025 -TimeoutMinutes 300 -Confirm:$false -Verbose
 
     .INPUTS
     Microsoft.Azure.Commands.Compute.Models.PSVirtualMachine
@@ -93,7 +93,7 @@ function Invoke-InPlaceUpgrade {
         [Parameter(Mandatory, ParameterSetName = 'ByName')]
         [string]$Name,
 
-        [Parameter()]
+        [Parameter(Mandatory)]
         [string]$Target,
 
         [Parameter()]
@@ -162,7 +162,7 @@ function Invoke-InPlaceUpgrade {
             UseMatrixProductKey = $UseMatrixProductKey
             Confirm            = $false
         }
-        if ($Target) { $startParams['Target'] = $Target }
+        $startParams['Target'] = $Target
         if ($MediaDiskResourceGroupName) { $startParams['MediaDiskResourceGroupName'] = $MediaDiskResourceGroupName }
         if ($ProductKey) { $startParams['ProductKey'] = $ProductKey }
         if ($TargetImageIndex) { $startParams['TargetImageIndex'] = $TargetImageIndex }
@@ -181,7 +181,19 @@ function Invoke-InPlaceUpgrade {
         while ((Get-Date) -lt $deadline) {
             Start-Sleep -Seconds $PollIntervalSeconds
             $fresh = Get-AzVM -ResourceGroupName $rg -Name $vmName -ErrorAction Stop
-            $check = Complete-InPlaceUpgrade -VM $fresh -TimeoutMinutes $TimeoutMinutes -KeepMediaDisk:$KeepMediaDisk -Confirm:$false `
+            # The state stays in this process; nothing is read back off the VM.
+            $completeParams = @{
+                VM             = $fresh
+                Target         = $Target
+                Engine         = $Engine
+                TimeoutMinutes = $TimeoutMinutes
+                KeepMediaDisk  = $KeepMediaDisk
+                Confirm        = $false
+            }
+            if ($start.Snapshot) { $completeParams['Snapshot'] = $start.Snapshot }
+            if ($start.MediaDisk) { $completeParams['MediaDisk'] = $start.MediaDisk }
+            if ($start.StartedAt) { $completeParams['StartedAt'] = $start.StartedAt }
+            $check = Complete-InPlaceUpgrade @completeParams `
                 -LogIngestionEndpoint $LogIngestionEndpoint -DataCollectionRuleId $DataCollectionRuleId
             Write-Verbose ("[{0}] {1:HH:mm:ss} {2}: {3}" -f $vmName, (Get-Date), $check.Result, $check.Reason)
             if ($check.Result -in @('Completed', 'Failed', 'Skipped')) { return $check }

@@ -13,7 +13,7 @@ function Test-InPlaceUpgradeReadiness {
     safe; the Run Command probe takes about a minute.
 
     .PARAMETER VM
-    The VM object from Get-AzVM or Get-InPlaceUpgradeCandidate. Accepts pipeline input.
+    The VM object from Get-AzVM. Accepts pipeline input.
 
     .PARAMETER ResourceGroupName
     Resource group of the VM when -Name is used instead of -VM.
@@ -40,12 +40,12 @@ function Test-InPlaceUpgradeReadiness {
 
     .EXAMPLE
     # Preflight everything that is approved, summarised
-    Get-InPlaceUpgradeCandidate | Test-InPlaceUpgradeReadiness |
+    Get-AzVM -ResourceGroupName rg-apps-prod-weu | Test-InPlaceUpgradeReadiness -Target WS2025 |
         Select-Object VMName, SourceName, Target, Engine, Decision, Failures, Warnings
 
     .EXAMPLE
     # Only the failed checks across a resource group
-    Get-InPlaceUpgradeCandidate -ResourceGroupName rg-apps-prod-weu | Test-InPlaceUpgradeReadiness |
+    Get-AzVM -ResourceGroupName rg-apps-prod-weu | Test-InPlaceUpgradeReadiness -Target WS2025 |
         ForEach-Object { $vm = $_.VMName; $_.Checks | Where-Object Result -eq 'Fail' | Select-Object @{ n = 'VM'; e = { $vm } }, Name, Detail }
 
     .INPUTS
@@ -81,7 +81,7 @@ function Test-InPlaceUpgradeReadiness {
         [Parameter(Mandatory, ParameterSetName = 'ByName')]
         [string]$Name,
 
-        [Parameter()]
+        [Parameter(Mandatory)]
         [string]$Target,
 
         [Parameter()]
@@ -97,11 +97,7 @@ function Test-InPlaceUpgradeReadiness {
             $VM = Get-AzVM -ResourceGroupName $ResourceGroupName -Name $Name -ErrorAction Stop
         }
 
-        $targetName = if ($Target) { $Target } else { Get-VMTagValue -VM $VM -Name $script:Tag.Target }
-        if (-not $targetName) {
-            throw "VM '$($VM.Name)' has no '$($script:Tag.Target)' tag and no -Target was given."
-        }
-        $targetObject = Get-InPlaceUpgradeTarget -Name $targetName
+        $targetObject = Get-InPlaceUpgradeTarget -Name $Target
 
         Write-Verbose "[$($VM.Name)] Reading power state."
         $powerState = Get-VMPowerState -ResourceGroupName $VM.ResourceGroupName -VMName $VM.Name

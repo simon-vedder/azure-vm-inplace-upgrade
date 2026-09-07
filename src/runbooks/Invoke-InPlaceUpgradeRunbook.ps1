@@ -162,8 +162,67 @@ if ($Ring) { $scope['Ring'] = $Ring.Trim() }
 $summary = @{}
 function Add-Summary { param([string]$Key) if ($summary.ContainsKey($Key)) { $summary[$Key]++ } else { $summary[$Key] = 1 } }
 
+# ---------------------------------------------------------------------------------------------
+# Tags live here, not in the module. The module takes parameters and returns objects; this runbook
+# is the thing that has to survive job boundaries, so it is the thing that persists state.
+# ---------------------------------------------------------------------------------------------
+$TagName = @{
+    Target    = 'UpgradeTarget'
+    State     = 'UpgradeState'
+    Ring      = 'UpgradeRing'
+    Snapshot  = 'UpgradeSnapshot'
+    MediaDisk = 'UpgradeMediaDisk'
+    StartedAt = 'UpgradeStartedAt'
+    Engine    = 'UpgradeEngine'
+}
+
+function Get-TagValue {
+    param($VM, [string]$Name)
+    if (-not $VM.Tags) { return $null }
+    $key = $VM.Tags.Keys | Where-Object { $_ -ieq $Name } | Select-Object -First 1
+    if (-not $key) { return $null }
+    [string]$VM.Tags[$key]
+}
+
+function Set-TagValue {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Local runbook helper; -DryRun is the gate and the calling cmdlets carry ShouldProcess.')]
+    [CmdletBinding()]
+    param([string]$ResourceId, [hashtable]$Tag)
+    if ($DryRun) { Write-Output "  DryRun: would tag $(($Tag.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ', ')"; return }
+    # Timestamps go in as Unix seconds, never as text. Azure stores an ISO string faithfully, but
+    # Get-AzVM hands it back re-serialised as "09/07/2026 09:11:41": no zone, and MM/dd that a dd/MM
+    # reader takes for a different day. Get-AzResource does not do this, Get-AzVM does. A number
+    # survives the round trip whatever the culture.
+    $stringTags = @{}
+    foreach ($k in $Tag.Keys) {
+        $v = $Tag[$k]
+        $stringTags[$k] = if ($v -is [datetime]) { [string][int64]([datetimeoffset]$v.ToUniversalTime()).ToUnixTimeSeconds() } else { [string]$v }
+    }
+    $null = Update-AzTag -ResourceId $ResourceId -Tag $stringTags -Operation Merge -ErrorAction Stop
+}
+
+# Selection by tag: an UpgradeTarget is required, the rest narrow it down.
+function Get-UpgradeCandidate {
+    param([string]$State)
+    $vms = if ($scope.ContainsKey('ResourceGroupName')) { Get-AzVM -ResourceGroupName $scope['ResourceGroupName'] } else { Get-AzVM }
+    $vms | Where-Object {
+        $t = Get-TagValue -VM $_ -Name $TagName.Target
+        if (-not $t) { return $false }
+        if ($scope.ContainsKey('Target') -and $t -ine $scope['Target']) { return $false }
+        if ($scope.ContainsKey('Ring')) {
+            $r = Get-TagValue -VM $_ -Name $TagName.Ring
+            if ($r -ine $scope['Ring']) { return $false }
+        }
+        if ($State) {
+            $st = Get-TagValue -VM $_ -Name $TagName.State
+            if ($st -ine $State) { return $false }
+        }
+        $true
+    }
+}
+
 if ($Mode -eq 'Start') {
-    $running = @(Get-InPlaceUpgradeCandidate @scope -State 'UpgradeStarted')
+    $running = @(Get-UpgradeCandidate -State 'UpgradeStarted')
     $slots = $MaxParallel - $running.Count
     Write-Output "In progress: $($running.Count) | MaxParallel: $MaxParallel | Slots: $([math]::Max($slots, 0))"
 
@@ -171,25 +230,80 @@ if ($Mode -eq 'Start') {
         Write-Output 'Nothing started: the parallelism limit is reached. Run Check to free slots.'
     }
     else {
-        $pending = @(Get-InPlaceUpgradeCandidate @scope -State 'Pending' | Sort-Object Name | Select-Object -First $slots)
+        $pending = @(Get-UpgradeCandidate -State 'Pending' | Sort-Object Name | Select-Object -First $slots)
         Write-Output "Pending and selected: $(if ($pending.Count) { ($pending.Name -join ', ') } else { 'none' })"
         foreach ($vm in $pending) {
-            $result = Start-InPlaceUpgrade -VM $vm -Engine $Engine -UseMatrixProductKey:$UseMatrixProductKey -Confirm:$false -WhatIf:$DryRun `
+            $vmTarget = Get-TagValue -VM $vm -Name $TagName.Target
+            $reuse = Get-TagValue -VM $vm -Name $TagName.Snapshot
+            $startParams = @{
+                VM                  = $vm
+                Target              = $vmTarget
+                Engine              = $Engine
+                UseMatrixProductKey = $UseMatrixProductKey
+                Confirm             = $false
+                WhatIf              = $DryRun
+            }
+            if ($reuse) { $startParams['ReuseSnapshot'] = $reuse }
+            $result = Start-InPlaceUpgrade @startParams `
                 -LogIngestionEndpoint $LogIngestionEndpoint -DataCollectionRuleId $DataCollectionRuleId
             Write-Output "[$($vm.Name)] $($result.Result): $($result.Reason)"
+
+            # Persist what the next Check job needs to finish this machine.
+            if ($result.Result -eq 'Started') {
+                $tags = @{ $TagName.State = 'UpgradeStarted'; $TagName.Engine = $result.Engine }
+                if ($result.Snapshot) { $tags[$TagName.Snapshot] = $result.Snapshot }
+                if ($result.MediaDisk) { $tags[$TagName.MediaDisk] = $result.MediaDisk }
+                if ($result.StartedAt) { $tags[$TagName.StartedAt] = $result.StartedAt }
+                Set-TagValue -ResourceId $vm.Id -Tag $tags
+            }
+            elseif ($result.Result -eq 'Failed') {
+                if ($result.Snapshot) { Set-TagValue -ResourceId $vm.Id -Tag @{ $TagName.State = 'Failed'; $TagName.Snapshot = $result.Snapshot } }
+                else { Set-TagValue -ResourceId $vm.Id -Tag @{ $TagName.State = 'Failed' } }
+            }
             Add-Summary $result.Result
             $result
         }
     }
 }
 else {
-    $started = @(Get-InPlaceUpgradeCandidate @scope -State 'UpgradeStarted')
+    $started = @(Get-UpgradeCandidate -State 'UpgradeStarted')
     Write-Output "Evaluating: $(if ($started.Count) { ($started.Name -join ', ') } else { 'none' })"
     foreach ($vm in $started) {
-        $result = Complete-InPlaceUpgrade -VM $vm -TimeoutMinutes $TimeoutMinutes -Confirm:$false -WhatIf:$DryRun `
+        $completeParams = @{
+            VM             = $vm
+            Target         = (Get-TagValue -VM $vm -Name $TagName.Target)
+            TimeoutMinutes = $TimeoutMinutes
+            Confirm        = $false
+            WhatIf         = $DryRun
+        }
+        $engineTag = Get-TagValue -VM $vm -Name $TagName.Engine
+        if ($engineTag) { $completeParams['Engine'] = $engineTag }
+        $snapTag = Get-TagValue -VM $vm -Name $TagName.Snapshot
+        if ($snapTag) { $completeParams['Snapshot'] = $snapTag }
+        $mediaTag = Get-TagValue -VM $vm -Name $TagName.MediaDisk
+        if ($mediaTag) { $completeParams['MediaDisk'] = $mediaTag }
+        $startedTag = Get-TagValue -VM $vm -Name $TagName.StartedAt
+        if ($startedTag) {
+            $seconds = 0L
+            if ([int64]::TryParse($startedTag, [ref]$seconds)) {
+                $completeParams['StartedAt'] = [datetimeoffset]::FromUnixTimeSeconds($seconds).UtcDateTime
+            }
+            else { Write-Output "[$($vm.Name)] $($TagName.StartedAt)='$startedTag' is not a Unix timestamp; the timeout cannot be applied." }
+        }
+
+        $result = Complete-InPlaceUpgrade @completeParams `
             -LogIngestionEndpoint $LogIngestionEndpoint -DataCollectionRuleId $DataCollectionRuleId
         Write-Output "[$($vm.Name)] $($result.Result): $($result.Reason)"
         if ($result.LogExcerpt) { Write-Output $result.LogExcerpt }
+
+        # A final state belongs on the VM, so the next Start pass does not pick it up again.
+        if ($result.Result -in @('Completed', 'Failed')) {
+            Set-TagValue -ResourceId $vm.Id -Tag @{ $TagName.State = $result.Result }
+        }
+        elseif (-not $startedTag) {
+            # No timestamp yet; stamp one so the timeout can be judged next time.
+            Set-TagValue -ResourceId $vm.Id -Tag @{ $TagName.StartedAt = (Get-Date).ToUniversalTime() }
+        }
         Add-Summary $result.Result
         $result
     }

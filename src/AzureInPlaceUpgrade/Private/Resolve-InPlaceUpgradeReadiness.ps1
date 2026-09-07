@@ -109,7 +109,9 @@ function Resolve-InPlaceUpgradeReadiness {
         if ($GuestFacts.ClusterServicePresent) { Add-Check 'Cluster' 'Fail' 'Failover Clustering is installed. Use Cluster-Aware Updating or a cluster OS rolling upgrade.' }
         else { Add-Check 'Cluster' 'Pass' 'Not a cluster node.' }
 
-        if ($GuestFacts.SetupRunning) { Add-Check 'SetupRunning' 'Fail' 'Windows Setup is already running in the guest.' }
+        # Observed in the guest, not read from a tag: this is what stops a second Start from
+        # launching Setup on top of a running one.
+        if ($GuestFacts.SetupRunning) { Add-Check 'SetupRunning' 'Fail' 'Windows Setup is already running in the guest; let it finish and evaluate it with Complete-InPlaceUpgrade.' }
         else { Add-Check 'SetupRunning' 'Pass' 'No Setup process running.' }
 
         # SoftwareLicensingProduct.LicenseStatus: 0 Unlicensed, 1 Licensed, 2 OOB grace, 3 OOT grace,
