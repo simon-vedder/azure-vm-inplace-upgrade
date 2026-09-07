@@ -55,8 +55,20 @@ param scheduleStartTime string = dateTimeAdd(baseTime, 'PT1H')
 
 param scheduleTimeZone string = 'Etc/UTC'
 
-@description('Enable the daily Start schedule at deployment. Off by default; enable it when the first ring is approved.')
+@description('Enable the Start schedule at deployment. Off by default; enable it when the first ring is approved.')
 param startScheduleEnabled bool = false
+
+@description('How often Start looks for work. Daily is the default on purpose: it makes scheduleStartTime a maintenance window, so upgrades begin at an hour you chose. Set it to Hour for a migration wave, when you want freed slots refilled the same day.')
+@allowed([
+  'Day'
+  'Hour'
+])
+param startScheduleFrequency string = 'Day'
+
+@description('Interval for the Start schedule, in units of startScheduleFrequency. Throughput ceiling is maxParallel VMs per Start run: with the daily default and maxParallel 3, three VMs a day begin upgrading.')
+@minValue(1)
+@maxValue(24)
+param startScheduleInterval int = 1
 
 param roleName string = 'Azure VM In-Place Upgrade Operator'
 
@@ -95,6 +107,8 @@ module automation 'modules/automation.bicep' = {
     checkIntervalMinutes: checkIntervalMinutes
     startScheduleTime: scheduleStartTime
     startScheduleEnabled: startScheduleEnabled
+    startScheduleFrequency: startScheduleFrequency
+    startScheduleInterval: startScheduleInterval
     scheduleTimeZone: scheduleTimeZone
   }
 }

@@ -4,7 +4,9 @@ function Complete-InPlaceUpgrade {
     Check a VM whose upgrade was started and report Completed, InProgress or Failed
 
     .DESCRIPTION
-    The Check half of the state machine (ADR 0003). Reads the build number, Setup processes and
+    The Check half of the state machine (ADR 0003). One look at the guest, one answer - it does
+    not loop and it does not wait. Call it on a schedule, or let Invoke-InPlaceUpgrade call it for
+    you until the machine is done. Reads the build number, Setup processes and
     the scheduled task result from the guest and decides: Completed when the guest reports the
     target build, InProgress while Setup runs or the guest is rebooting, Failed when the task
     ended with an error, the VM was stopped, or -StartedAt is older than -TimeoutMinutes.

@@ -24,6 +24,8 @@ param timeoutMinutes int
 param checkIntervalMinutes int
 param startScheduleTime string
 param startScheduleEnabled bool
+param startScheduleFrequency string
+param startScheduleInterval int
 param scheduleTimeZone string
 
 resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
@@ -240,8 +242,8 @@ resource startSchedule 'Microsoft.Automation/automationAccounts/schedules@2023-1
   name: 'inplaceupgrade-start'
   properties: {
     description: 'Starts upgrades for VMs in UpgradeState=Pending, up to MaxParallel. Linked to the runbook only when enabled at deployment.'
-    frequency: 'Day'
-    interval: 1
+    frequency: startScheduleFrequency
+    interval: startScheduleInterval
     startTime: startScheduleTime
     timeZone: scheduleTimeZone
   }
