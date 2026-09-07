@@ -12,8 +12,6 @@ BeforeAll {
             Resolve      = Get-Command Resolve-InPlaceUpgradeReadiness
             ConvertFacts = Get-Command ConvertFrom-GuestFacts
             ArmFacts     = Get-Command Get-VMArmFacts
-            CandidateTag = Get-Command Test-CandidateTag
-            TagValue     = Get-Command Get-VMTagValue
             GuestResult  = Get-Command ConvertFrom-GuestResult
             HideKey      = Get-Command Hide-ProductKey
             MediaName    = Get-Command Get-UpgradeMediaDiskName
