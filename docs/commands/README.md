@@ -17,7 +17,7 @@ Per-command permissions are on each page under **Requirements and notes**.
 
 | Command | What it does |
 |---|---|
-| [Complete-InPlaceUpgrade](Complete-InPlaceUpgrade.md) | Evaluate a VM in state UpgradeStarted and move it to Completed or Failed |
+| [Complete-InPlaceUpgrade](Complete-InPlaceUpgrade.md) | Check a VM whose upgrade was started and report Completed, InProgress or Failed |
 | [Get-InPlaceUpgradeTarget](Get-InPlaceUpgradeTarget.md) | Resolve an upgrade target and its supported source versions from the target matrix |
 | [Invoke-InPlaceUpgrade](Invoke-InPlaceUpgrade.md) | Start an in-place upgrade and wait for it to finish, in one call |
 | [Start-InPlaceUpgrade](Start-InPlaceUpgrade.md) | Snapshot one Azure VM, attach the upgrade media and start Windows Setup unattended |
