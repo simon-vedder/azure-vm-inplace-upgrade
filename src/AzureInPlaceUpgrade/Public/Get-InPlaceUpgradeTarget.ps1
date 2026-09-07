@@ -4,7 +4,7 @@ function Get-InPlaceUpgradeTarget {
     Resolve an upgrade target and its supported source versions from the target matrix
 
     .DESCRIPTION
-    The target matrix shipped with the module (targets.json) is the only mapping from a tag value
+    The target matrix shipped with the module (targets.json) is the only mapping from a target key
     such as WS2025 to source builds, editions, installation types, upgrade media images and the
     public KMS client setup keys Setup may need. This function reads it. Without parameters it
     returns every target; with -Name one target; with -SourceBuild only the targets that accept

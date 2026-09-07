@@ -38,7 +38,7 @@ Prerequisites:       PowerShell 7.2+, Az.Compute; a healthy Azure Guest Agent in
 | `-VM` | Object | yes | yes |  | The VM object from Get-AzVM. Accepts pipeline input. |
 | `-ResourceGroupName` | String | yes | no |  | Resource group of the VM when -Name is used instead of -VM. |
 | `-Name` | String | yes | no |  | Name of the VM when -ResourceGroupName is used instead of -VM. |
-| `-Target` | String | yes | no |  | The target key from the matrix, for example WS2025. Defaults to the VM's UpgradeTarget tag; one of the two must be present. |
+| `-Target` | String | yes | no |  | Required. The target key from the matrix, for example WS2025; Get-InPlaceUpgradeTarget lists them. The module never reads it from a tag - the caller states the target. |
 | `-MinimumFreeSpaceGB` | Int32 | no | no | 30 | Free space required on C: before an upgrade would be started. |
 | `-SkipMediaCheck` | SwitchParameter | no | no |  | Do not look up the upgrade media image in the VM's region. Saves one call when only the guest is of interest; the engine check then reports a warning instead of a pass. |
 
