@@ -654,3 +654,168 @@ Describe 'Readiness rules (Resolve-InPlaceUpgradeReadiness)' {
         $r.TargetBuild | Should -Be 17763
     }
 }
+
+Describe 'Start and Complete actually run (Az and guest mocked)' {
+    BeforeAll {
+        $script:TestVM = [pscustomobject]@{
+            Name              = 'vm-app-01'
+            ResourceGroupName = 'rg-apps'
+            Location          = 'westeurope'
+            Id                = '/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-apps/providers/Microsoft.Compute/virtualMachines/vm-app-01'
+            Tags              = @{ UpgradeTarget = 'WS2025'; UpgradeState = 'Pending' }
+        }
+
+        Mock -ModuleName AzureInPlaceUpgrade Get-AzVM { $script:TestVM }
+        Mock -ModuleName AzureInPlaceUpgrade Test-InPlaceUpgradeReadiness {
+            [pscustomobject]@{
+                Decision = 'Eligible'; SourceBuild = 20348; Edition = 'ServerDatacenter'
+                InstallationType = 'Server'; Engine = 'MediaDisk'; Checks = @()
+            }
+        }
+        Mock -ModuleName AzureInPlaceUpgrade New-VMOSSnapshot { [pscustomobject]@{ Name = 'vm-app-01-prews2025-20260906' } }
+        Mock -ModuleName AzureInPlaceUpgrade New-UpgradeMediaDisk { [pscustomobject]@{ Name = 'vm-app-01-upgrademedia-ws2025' } }
+        Mock -ModuleName AzureInPlaceUpgrade Add-UpgradeMediaDisk { 0 }
+        Mock -ModuleName AzureInPlaceUpgrade Resolve-GuestSetupPath { [pscustomobject]@{ Success = $true; SetupPath = 'E:\setup.exe'; Reason = $null } }
+        Mock -ModuleName AzureInPlaceUpgrade Get-GuestWimImage {
+            [pscustomobject]@{
+                Error = $null; WimPath = 'E:\sources\install.wim'
+                Images = @([pscustomobject]@{ Index = 4; Name = 'Datacenter (Desktop Experience)'; EditionId = 'ServerDatacenter'; InstallationType = 'Server' })
+            }
+        }
+        Mock -ModuleName AzureInPlaceUpgrade Select-UpgradeImageIndex { 4 }
+        Mock -ModuleName AzureInPlaceUpgrade Start-GuestSetup { [pscustomobject]@{ Started = $true; Reason = 'Setup started.'; Raw = '' } }
+        Mock -ModuleName AzureInPlaceUpgrade Write-UpgradeRecord { $false }
+        Mock -ModuleName AzureInPlaceUpgrade Update-AzTag { throw 'The module must never write a tag.' }
+    }
+
+    It 'starts an upgrade and returns everything Complete needs' {
+        $r = Start-InPlaceUpgrade -ResourceGroupName rg-apps -Name vm-app-01 -Target WS2025 -Confirm:$false
+        $r.Result | Should -Be 'Started'
+        $r.Snapshot | Should -Be 'vm-app-01-prews2025-20260906'
+        $r.MediaDisk | Should -Be 'rg-apps/vm-app-01-upgrademedia-ws2025'
+        $r.StartedAt | Should -Not -BeNullOrEmpty
+        $r.Target | Should -Be 'WS2025'
+    }
+
+    It 'never writes a tag while starting' {
+        $null = Start-InPlaceUpgrade -ResourceGroupName rg-apps -Name vm-app-01 -Target WS2025 -Confirm:$false
+        Should -Invoke -ModuleName AzureInPlaceUpgrade Update-AzTag -Times 0
+    }
+
+    It 'hands back a ResumeCommand that names the values Complete needs' {
+        $r = Start-InPlaceUpgrade -ResourceGroupName rg-apps -Name vm-app-01 -Target WS2025 -Confirm:$false
+        $r.ResumeCommand | Should -Match 'Complete-InPlaceUpgrade'
+        $r.ResumeCommand | Should -Match '-Target WS2025'
+        $r.ResumeCommand | Should -Match ('-Snapshot ' + [regex]::Escape($r.Snapshot))
+        $r.ResumeCommand | Should -Match ('-MediaDisk ' + [regex]::Escape($r.MediaDisk))
+        $r.ResumeCommand | Should -Match '-StartedAt '
+    }
+
+    It 'reuses the snapshot the caller names instead of taking a new one' {
+        Mock -ModuleName AzureInPlaceUpgrade Get-AzSnapshot { [pscustomobject]@{ Name = 'snap-from-before' } }
+        $r = Start-InPlaceUpgrade -ResourceGroupName rg-apps -Name vm-app-01 -Target WS2025 -ReuseSnapshot 'snap-from-before' -Confirm:$false
+        $r.Snapshot | Should -Be 'snap-from-before'
+        Should -Invoke -ModuleName AzureInPlaceUpgrade New-VMOSSnapshot -Times 0
+    }
+
+    Context 'Complete' {
+        BeforeAll {
+            Mock -ModuleName AzureInPlaceUpgrade Get-VMPowerState { 'running' }
+            Mock -ModuleName AzureInPlaceUpgrade Get-GuestUpgradeStatus {
+                [pscustomobject]@{ Build = 26100; ProductName = 'Windows Server 2025 Datacenter'; TaskState = 'Ready'; TaskResult = 0; SetupRunning = $false }
+            }
+            Mock -ModuleName AzureInPlaceUpgrade Remove-GuestUpgradeTask { $true }
+            Mock -ModuleName AzureInPlaceUpgrade Remove-UpgradeMediaDisk { [pscustomobject]@{ Removed = $true; Error = $null } }
+        }
+
+        It 'finishes from the values it is given, without reading the VM' {
+            $r = Complete-InPlaceUpgrade -ResourceGroupName rg-apps -Name vm-app-01 -Target WS2025 `
+                -Snapshot 'snap-1' -MediaDisk 'rg-media/vm-app-01-upgrademedia-ws2025' -StartedAt (Get-Date).AddMinutes(-37) -Confirm:$false
+            $r.Result | Should -Be 'Completed'
+            $r.Build | Should -Be 26100
+            $r.Snapshot | Should -Be 'snap-1'
+            Should -Invoke -ModuleName AzureInPlaceUpgrade Update-AzTag -Times 0
+        }
+
+        It 'removes the media disk from the resource group the caller named' {
+            $null = Complete-InPlaceUpgrade -ResourceGroupName rg-apps -Name vm-app-01 -Target WS2025 `
+                -Snapshot 'snap-1' -MediaDisk 'rg-media/vm-app-01-upgrademedia-ws2025' -StartedAt (Get-Date).AddMinutes(-37) -Confirm:$false
+            Should -Invoke -ModuleName AzureInPlaceUpgrade Remove-UpgradeMediaDisk -ParameterFilter {
+                $DiskResourceGroupName -eq 'rg-media' -and $DiskName -eq 'vm-app-01-upgrademedia-ws2025'
+            }
+        }
+    }
+
+    It 'Invoke wires the Start result into Complete and finishes in one call' {
+        Mock -ModuleName AzureInPlaceUpgrade Start-Sleep { }
+        Mock -ModuleName AzureInPlaceUpgrade Get-VMPowerState { 'running' }
+        Mock -ModuleName AzureInPlaceUpgrade Get-GuestUpgradeStatus {
+            [pscustomobject]@{ Build = 26100; ProductName = 'Windows Server 2025 Datacenter'; TaskState = 'Ready'; TaskResult = 0; SetupRunning = $false }
+        }
+        Mock -ModuleName AzureInPlaceUpgrade Remove-GuestUpgradeTask { $true }
+        Mock -ModuleName AzureInPlaceUpgrade Remove-UpgradeMediaDisk { [pscustomobject]@{ Removed = $true; Error = $null } }
+
+        $r = Invoke-InPlaceUpgrade -ResourceGroupName rg-apps -Name vm-app-01 -Target WS2025 -Confirm:$false
+        $r.Result | Should -Be 'Completed'
+        Should -Invoke -ModuleName AzureInPlaceUpgrade Update-AzTag -Times 0
+    }
+}
+
+Describe 'The runbook owns the tags (its helpers, extracted and run)' {
+    BeforeAll {
+        # The runbook is a script with a param block, so it cannot be dot-sourced without running.
+        # Pull the helper functions out of its AST and define them here instead.
+        $runbookPath = Join-Path $PSScriptRoot '..' 'src' 'runbooks' 'Invoke-InPlaceUpgradeRunbook.ps1'
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile($runbookPath, [ref]$null, [ref]$null)
+        $wanted = 'Get-TagValue', 'Set-TagValue', 'Get-UpgradeCandidate'
+        foreach ($name in $wanted) {
+            $fn = $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name }, $true) |
+                Select-Object -First 1
+            if (-not $fn) { throw "The runbook no longer defines $name." }
+            . ([scriptblock]::Create($fn.Extent.Text))
+        }
+        $script:TagName = @{ Target = 'UpgradeTarget'; State = 'UpgradeState'; Ring = 'UpgradeRing' }
+    }
+
+    It 'reads a tag whatever the casing of its name' {
+        $vm = [pscustomobject]@{ Tags = @{ 'upgradetarget' = 'WS2025' } }
+        Get-TagValue -VM $vm -Name 'UpgradeTarget' | Should -Be 'WS2025'
+    }
+
+    It 'returns nothing for a VM without tags' {
+        Get-TagValue -VM ([pscustomobject]@{ Tags = $null }) -Name 'UpgradeTarget' | Should -BeNullOrEmpty
+    }
+
+    It 'selects only VMs that carry an UpgradeTarget' {
+        $tagged = [pscustomobject]@{ Name = 'vm-1'; Tags = @{ UpgradeTarget = 'WS2025'; UpgradeState = 'Pending' } }
+        $plain = [pscustomobject]@{ Name = 'vm-2'; Tags = @{ Owner = 'ops' } }
+        Mock Get-AzVM { $tagged, $plain }
+        $scope = @{}
+        $picked = @(Get-UpgradeCandidate -State 'Pending')
+        $picked.Name | Should -Be 'vm-1'
+    }
+
+    It 'honours the state and ring filters' {
+        $a = [pscustomobject]@{ Name = 'vm-a'; Tags = @{ UpgradeTarget = 'WS2025'; UpgradeState = 'Pending'; UpgradeRing = 'Ring0' } }
+        $b = [pscustomobject]@{ Name = 'vm-b'; Tags = @{ UpgradeTarget = 'WS2025'; UpgradeState = 'Pending'; UpgradeRing = 'Ring1' } }
+        $c = [pscustomobject]@{ Name = 'vm-c'; Tags = @{ UpgradeTarget = 'WS2025'; UpgradeState = 'UpgradeStarted'; UpgradeRing = 'Ring0' } }
+        Mock Get-AzVM { $a, $b, $c }
+        $scope = @{ Ring = 'Ring0' }
+        (@(Get-UpgradeCandidate -State 'Pending')).Name | Should -Be 'vm-a'
+        (@(Get-UpgradeCandidate -State 'UpgradeStarted')).Name | Should -Be 'vm-c'
+    }
+
+    It 'writes tags as strings and merges them' {
+        $DryRun = $false
+        Mock Update-AzTag { }
+        Set-TagValue -ResourceId '/subscriptions/x/vm' -Tag @{ UpgradeState = 'UpgradeStarted' }
+        Should -Invoke Update-AzTag -ParameterFilter { $Operation -eq 'Merge' -and $Tag['UpgradeState'] -eq 'UpgradeStarted' }
+    }
+
+    It 'writes nothing on a dry run' {
+        $DryRun = $true
+        Mock Update-AzTag { }
+        Set-TagValue -ResourceId '/subscriptions/x/vm' -Tag @{ UpgradeState = 'UpgradeStarted' }
+        Should -Invoke Update-AzTag -Times 0
+    }
+}
