@@ -821,6 +821,25 @@ Describe 'The runbook owns the tags (its helpers, extracted and run)' {
         Should -Invoke Update-AzTag -ParameterFilter { $Operation -eq 'Merge' -and $Tag['UpgradeState'] -eq 'UpgradeStarted' }
     }
 
+    It 'writes a timestamp as Unix seconds, not as text' {
+        # Azure stores an ISO string faithfully, but Get-AzVM hands it back as
+        # "09/07/2026 09:11:41": no zone, and MM/dd that a dd/MM reader takes for another day.
+        # That cost 60 days of age on a real lab run. A number survives.
+        $DryRun = $false
+        $captured = $null
+        Mock Update-AzTag { $script:capturedTag = $Tag }
+        Set-TagValue -ResourceId '/subscriptions/x/vm' -Tag @{ UpgradeStartedAt = ([datetime]'2026-09-07T09:13:40Z') }
+        $script:capturedTag['UpgradeStartedAt'] | Should -Be '1788772420'
+    }
+
+    It 'reads those seconds back as the same UTC instant' {
+        $seconds = 0L
+        [int64]::TryParse('1788772420', [ref]$seconds) | Should -BeTrue
+        $t = [datetimeoffset]::FromUnixTimeSeconds($seconds).UtcDateTime
+        $t.ToString('o') | Should -BeLike '2026-09-07T09:13:40*'
+        $t.Kind | Should -Be 'Utc'
+    }
+
     It 'writes nothing on a dry run' {
         $DryRun = $true
         Mock Update-AzTag { }

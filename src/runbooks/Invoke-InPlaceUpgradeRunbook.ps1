@@ -180,7 +180,8 @@ function Get-TagValue {
     param($VM, [string]$Name)
     if (-not $VM.Tags) { return $null }
     $key = $VM.Tags.Keys | Where-Object { $_ -ieq $Name } | Select-Object -First 1
-    if ($key) { [string]$VM.Tags[$key] } else { $null }
+    if (-not $key) { return $null }
+    [string]$VM.Tags[$key]
 }
 
 function Set-TagValue {
@@ -188,8 +189,15 @@ function Set-TagValue {
     [CmdletBinding()]
     param([string]$ResourceId, [hashtable]$Tag)
     if ($DryRun) { Write-Output "  DryRun: would tag $(($Tag.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ', ')"; return }
+    # Timestamps go in as Unix seconds, never as text. Azure stores an ISO string faithfully, but
+    # Get-AzVM hands it back re-serialised as "09/07/2026 09:11:41": no zone, and MM/dd that a dd/MM
+    # reader takes for a different day. Get-AzResource does not do this, Get-AzVM does. A number
+    # survives the round trip whatever the culture.
     $stringTags = @{}
-    foreach ($k in $Tag.Keys) { $stringTags[$k] = [string]$Tag[$k] }
+    foreach ($k in $Tag.Keys) {
+        $v = $Tag[$k]
+        $stringTags[$k] = if ($v -is [datetime]) { [string][int64]([datetimeoffset]$v.ToUniversalTime()).ToUnixTimeSeconds() } else { [string]$v }
+    }
     $null = Update-AzTag -ResourceId $ResourceId -Tag $stringTags -Operation Merge -ErrorAction Stop
 }
 
@@ -245,7 +253,7 @@ if ($Mode -eq 'Start') {
                 $tags = @{ $TagName.State = 'UpgradeStarted'; $TagName.Engine = $result.Engine }
                 if ($result.Snapshot) { $tags[$TagName.Snapshot] = $result.Snapshot }
                 if ($result.MediaDisk) { $tags[$TagName.MediaDisk] = $result.MediaDisk }
-                if ($result.StartedAt) { $tags[$TagName.StartedAt] = $result.StartedAt.ToUniversalTime().ToString('o') }
+                if ($result.StartedAt) { $tags[$TagName.StartedAt] = $result.StartedAt }
                 Set-TagValue -ResourceId $vm.Id -Tag $tags
             }
             elseif ($result.Result -eq 'Failed') {
@@ -276,9 +284,11 @@ else {
         if ($mediaTag) { $completeParams['MediaDisk'] = $mediaTag }
         $startedTag = Get-TagValue -VM $vm -Name $TagName.StartedAt
         if ($startedTag) {
-            $parsed = [datetime]::MinValue
-            if ([datetime]::TryParse($startedTag, [ref]$parsed)) { $completeParams['StartedAt'] = $parsed }
-            else { Write-Output "[$($vm.Name)] $($TagName.StartedAt)='$startedTag' is not a timestamp; the timeout cannot be applied." }
+            $seconds = 0L
+            if ([int64]::TryParse($startedTag, [ref]$seconds)) {
+                $completeParams['StartedAt'] = [datetimeoffset]::FromUnixTimeSeconds($seconds).UtcDateTime
+            }
+            else { Write-Output "[$($vm.Name)] $($TagName.StartedAt)='$startedTag' is not a Unix timestamp; the timeout cannot be applied." }
         }
 
         $result = Complete-InPlaceUpgrade @completeParams `
@@ -292,7 +302,7 @@ else {
         }
         elseif (-not $startedTag) {
             # No timestamp yet; stamp one so the timeout can be judged next time.
-            Set-TagValue -ResourceId $vm.Id -Tag @{ $TagName.StartedAt = (Get-Date).ToUniversalTime().ToString('o') }
+            Set-TagValue -ResourceId $vm.Id -Tag @{ $TagName.StartedAt = (Get-Date).ToUniversalTime() }
         }
         Add-Summary $result.Result
         $result

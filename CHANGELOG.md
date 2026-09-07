@@ -23,6 +23,15 @@ now live entirely in the runbook, which is the thing that has to survive job bou
 - A second `Start` on a running upgrade is stopped by the existing `SetupRunning` preflight check,
   which observes the guest instead of trusting a tag.
 
+### Fixed
+- `Start-InPlaceUpgrade` put a Unix epoch number in the `ResumeCommand` while `-StartedAt` is a
+  `[datetime]`. An integer binds as ticks, so a pasted command set the start to year 1 and the next
+  Check declared an instant timeout. It now carries a quoted round-trip string.
+- The runbook stores `UpgradeStartedAt` as Unix seconds. Azure keeps an ISO string faithfully, but
+  `Get-AzVM` returns it re-serialised as `09/07/2026 09:11:41`: no zone, and `MM/dd` that a `dd/MM`
+  reader takes for another day. On a lab run that turned 41 minutes of age into 60 days.
+  `Get-AzResource` does not do this; `Get-AzVM` does.
+
 ### Removed
 - `Get-InPlaceUpgradeCandidate`. Tag-based discovery is orchestration; the runbook does it with
   `Get-AzVM` and a tag filter.
