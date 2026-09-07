@@ -183,7 +183,7 @@ Start and Complete add `virtualMachines/write`, `disks/read|write|delete`, `snap
 
 ## Status
 
-Pre-release `0.2.0-preview`. Five upgrade paths, the Automation path with telemetry and the Bicep
+Pre-release `0.3.0-preview`. Five upgrade paths, the Automation path with telemetry and the Bicep
 deployment are lab-verified on Marketplace VMs. Not yet verified: the 2012 R2 source, the WS2022
 and WS2019 targets, Trusted Launch VMs, imported or retail-activated guests. Read
 [docs/when-not-to-use-this.md](docs/when-not-to-use-this.md) before tagging production, and

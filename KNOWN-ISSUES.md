@@ -93,7 +93,8 @@ documented by Microsoft. Each entry says which. "To verify" means it is on the l
   `version` changes.** *(observed, 2026-09-05)* A redeploy with a changed package behind the same
   URI was a silent no-op; the runbook kept its old parameters and `Start-AzAutomationRunbook`
   answered "Invalid runbook parameters". The Bicep stamps `contentVersion` on both links; it must
-  look like a `System.Version` (`0.2.0.7`), a pre-release suffix is rejected.
+  look like a `System.Version` (`0.3.0.7`), a pre-release suffix is rejected, so the template
+  defaults it to `moduleVersion` with the suffix stripped.
 - **Job schedules are immutable once linked.** *(observed)* Changing their parameters in the
   template does nothing. Anything that may change later (the telemetry target) is an Automation
   variable the runbook reads, not a job parameter.

@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.46.1.21595",
-      "templateHash": "6350501029536261749"
+      "templateHash": "2763307606806298714"
     }
   },
   "parameters": {
@@ -45,7 +45,7 @@
       "defaultValue": "",
       "minLength": 0,
       "metadata": {
-        "description": "Version stamp written to the module and runbook content links, System.Version form (up to four numeric parts, e.g. 0.2.0.1). Defaults to moduleVersion; bump it to force Automation to re-import unchanged URIs."
+        "description": "Version stamp written to the module and runbook content links, System.Version form (up to four numeric parts, e.g. 0.3.0.1). Defaults to moduleVersion with any pre-release suffix stripped, because Automation rejects one; bump it to force Automation to re-import unchanged URIs."
       }
     },
     "modulePackageUri": {
@@ -209,7 +209,7 @@
           "runbookContentUri": {
             "value": "[parameters('runbookContentUri')]"
           },
-          "contentVersion": "[if(empty(parameters('contentVersion')), createObject('value', parameters('moduleVersion')), createObject('value', parameters('contentVersion')))]",
+          "contentVersion": "[if(empty(parameters('contentVersion')), createObject('value', split(parameters('moduleVersion'), '-')[0]), createObject('value', parameters('contentVersion')))]",
           "subscriptionIdForJobs": {
             "value": "[subscription().subscriptionId]"
           },
