@@ -230,7 +230,7 @@ function Start-InPlaceUpgrade {
             )
             if ($snapshotName) { $parts += "-Snapshot $snapshotName" }
             if ($snapshotName -and $Engine -eq 'MediaDisk') { $parts += "-MediaDisk $mediaDiskRg/$mediaDiskName" }
-            if ($startedAt) { $parts += ("-StartedAt " + (ConvertTo-TagTimestamp -Value $startedAt)) }
+            if ($startedAt) { $parts += ("-StartedAt '" + $startedAt.ToUniversalTime().ToString('o') + "'") }
             $parts -join ' '
         }
 

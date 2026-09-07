@@ -711,6 +711,15 @@ Describe 'Start and Complete actually run (Az and guest mocked)' {
         $r.ResumeCommand | Should -Match '-StartedAt '
     }
 
+    It 'puts a real timestamp in the ResumeCommand, not an epoch number' {
+        # -StartedAt is [datetime]; an integer binds as ticks and lands in year 1, which makes
+        # Complete declare an instant timeout. Caught in the lab, so it stays caught here.
+        $r = Start-InPlaceUpgrade -ResourceGroupName rg-apps -Name vm-app-01 -Target WS2025 -Confirm:$false
+        $stamp = ([regex]::Match($r.ResumeCommand, "-StartedAt '([^']+)'")).Groups[1].Value
+        $stamp | Should -Not -BeNullOrEmpty
+        ([datetime]$stamp).Year | Should -Be (Get-Date).Year
+    }
+
     It 'reuses the snapshot the caller names instead of taking a new one' {
         Mock -ModuleName AzureInPlaceUpgrade Get-AzSnapshot { [pscustomobject]@{ Name = 'snap-from-before' } }
         $r = Start-InPlaceUpgrade -ResourceGroupName rg-apps -Name vm-app-01 -Target WS2025 -ReuseSnapshot 'snap-from-before' -Confirm:$false
