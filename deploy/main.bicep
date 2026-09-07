@@ -2,7 +2,7 @@
 // system-assigned identity, the least-privilege role it needs, Log Analytics, module imports,
 // runbook and schedules. Subscription scope because a custom role definition lives there.
 //
-//   az deployment sub create -l westeurope -f deploy/main.bicep -p moduleVersion=0.3.0-preview
+//   az deployment sub create -l westeurope -f deploy/main.bicep -p moduleVersion=0.3.1-preview
 //
 // Nothing starts an upgrade by itself: the Start schedule is disabled until an operator enables
 // it, and only VMs tagged UpgradeState=Pending are ever touched.

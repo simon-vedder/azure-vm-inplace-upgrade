@@ -13,7 +13,7 @@ Subscription-scope deployment, because the custom role definition lives there:
 
 ```bash
 az deployment sub create -l westeurope -f deploy/main.bicep \
-  -p moduleVersion=0.3.0-preview targetResourceGroupName=rg-apps-prod-weu ring=Ring0 maxParallel=3
+  -p moduleVersion=0.3.1-preview targetResourceGroupName=rg-apps-prod-weu ring=Ring0 maxParallel=3
 ```
 
 What it creates:
@@ -48,7 +48,7 @@ az role definition delete --name "Azure VM In-Place Upgrade Operator"
 ```
 
 `modulePackageUri` defaults to the PowerShell Gallery package for `moduleVersion` (for example
-`0.3.0-preview`); override it only for a private build, such as a GitHub release asset or a zip of
+`0.3.1-preview`); override it only for a private build, such as a GitHub release asset or a zip of
 `src/AzureInPlaceUpgrade` on a storage account. Pin `runbookContentUri` to the raw runbook URL of the
 matching tag in production. When the content behind an unchanged URI changes, bump `contentVersion` (defaults to `moduleVersion` with any pre-release suffix stripped, because it must look like a `System.Version`, e.g. `0.3.0.7`): Automation
 only re-imports a module or re-publishes a runbook when the version stamp on the link changes.
