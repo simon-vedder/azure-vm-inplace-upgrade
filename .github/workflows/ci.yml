@@ -38,6 +38,10 @@ jobs:
         shell: pwsh
         run: Test-ModuleManifest ./src/AzureInPlaceUpgrade/AzureInPlaceUpgrade.psd1 | Format-List Name, Version, PowerShellVersion
 
+      - name: Command reference is current
+        shell: pwsh
+        run: ./tools/New-CommandReference.ps1 -Check
+
       - name: Analyze
         shell: pwsh
         run: |
