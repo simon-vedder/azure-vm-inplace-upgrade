@@ -5,7 +5,7 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-## [0.3.0-preview] - 2026-09-06
+## [0.3.0-preview] - 2026-09-07
 
 Breaking. The module no longer reads or writes Azure tags. Tags are an orchestration concern and
 now live entirely in the runbook, which is the thing that has to survive job boundaries.
