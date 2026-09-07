@@ -1,16 +1,16 @@
 function Complete-InPlaceUpgrade {
     <#
     .SYNOPSIS
-    Evaluate a VM in state UpgradeStarted and move it to Completed or Failed
+    Check a VM whose upgrade was started and report Completed, InProgress or Failed
 
     .DESCRIPTION
     The Check half of the state machine (ADR 0003). Reads the build number, Setup processes and
     the scheduled task result from the guest and decides: Completed when the guest reports the
     target build, InProgress while Setup runs or the guest is rebooting, Failed when the task
-    ended with an error, the VM was stopped, or UpgradeStartedAt is older than -TimeoutMinutes.
+    ended with an error, the VM was stopped, or -StartedAt is older than -TimeoutMinutes.
     On a final state the media disk is detached and deleted and the scheduled task removed; the
-    snapshot is kept as the rollback point. Only VMs in UpgradeStarted are evaluated; every other
-    state is skipped. Safe to run every few minutes.
+    snapshot is kept as the rollback point. It evaluates whichever VM it is given - the caller
+    decides which ones are in flight. Safe to run every few minutes.
 
     .PARAMETER VM
     The VM object from Get-AzVM. Accepts
@@ -42,7 +42,7 @@ function Complete-InPlaceUpgrade {
     pass it for any unattended run.
 
     .PARAMETER TimeoutMinutes
-    How old UpgradeStartedAt may be before a VM that has not reached the target build is declared
+    How old -StartedAt may be before a VM that has not reached the target build is declared
     Failed.
 
     .PARAMETER KeepMediaDisk
@@ -56,7 +56,7 @@ function Complete-InPlaceUpgrade {
     Immutable id (dcr-...) of the data collection rule that routes Custom-InPlaceUpgrade_CL.
 
     .EXAMPLE
-    # Evaluate every VM that Start left in UpgradeStarted
+    # Check one VM whose upgrade is in flight
     Complete-InPlaceUpgrade -ResourceGroupName rg-apps-prod-weu -Name vm-app-prod-weu-01 -Target WS2025 |
         Select-Object VMName, Result, Reason
 

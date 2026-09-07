@@ -1,14 +1,14 @@
 # Complete-InPlaceUpgrade
 
-> Evaluate a VM in state UpgradeStarted and move it to Completed or Failed
+> Check a VM whose upgrade was started and report Completed, InProgress or Failed
 
 The Check half of the state machine (ADR 0003). Reads the build number, Setup processes and
 the scheduled task result from the guest and decides: Completed when the guest reports the
 target build, InProgress while Setup runs or the guest is rebooting, Failed when the task
-ended with an error, the VM was stopped, or UpgradeStartedAt is older than -TimeoutMinutes.
+ended with an error, the VM was stopped, or -StartedAt is older than -TimeoutMinutes.
 On a final state the media disk is detached and deleted and the scheduled task removed; the
-snapshot is kept as the rollback point. Only VMs in UpgradeStarted are evaluated; every other
-state is skipped. Safe to run every few minutes.
+snapshot is kept as the rollback point. It evaluates whichever VM it is given - the caller
+decides which ones are in flight. Safe to run every few minutes.
 
 ## Syntax
 
@@ -40,7 +40,7 @@ Prerequisites:       PowerShell 7.2+, Az.Compute, Az.Resources; an established A
 | `-MediaDisk` | String | no | no |  | Name of the managed disk holding the upgrade media that Start attached. Used to detach and delete it once the upgrade succeeded, unless -KeepMediaDisk is set. Also from the StartResult. |
 | `-Engine` | String | no | no | MediaDisk | Which engine Start used: MediaDisk (Microsoft's upgrade media as a managed disk, the proven path) or FeatureUpdate (Windows Update). It decides how the completion is judged and what cleanup is needed. Defaults to MediaDisk. |
 | `-StartedAt` | DateTime | no | no |  | When the upgrade was started, as recorded by Start-InPlaceUpgrade. -TimeoutMinutes is measured from it. Without it the timeout cannot be applied and the command warns and keeps waiting, so pass it for any unattended run. |
-| `-TimeoutMinutes` | Int32 | no | no | 240 | How old UpgradeStartedAt may be before a VM that has not reached the target build is declared Failed. |
+| `-TimeoutMinutes` | Int32 | no | no | 240 | How old -StartedAt may be before a VM that has not reached the target build is declared Failed. |
 | `-KeepMediaDisk` | SwitchParameter | no | no |  | Keep the media disk after a final state. Costs money; useful when debugging. |
 | `-LogIngestionEndpoint` | String | no | no |  | Logs ingestion endpoint of a data collection endpoint. With -DataCollectionRuleId, every evaluation (InProgress, Completed, Failed) is written to the InPlaceUpgrade_CL table. |
 | `-DataCollectionRuleId` | String | no | no |  | Immutable id (dcr-...) of the data collection rule that routes Custom-InPlaceUpgrade_CL. |
@@ -52,7 +52,7 @@ Supports `-WhatIf` and `-Confirm`.
 ### Example 1
 
 ```powershell
-# Evaluate every VM that Start left in UpgradeStarted
+# Check one VM whose upgrade is in flight
 Complete-InPlaceUpgrade -ResourceGroupName rg-apps-prod-weu -Name vm-app-prod-weu-01 -Target WS2025 |
     Select-Object VMName, Result, Reason
 ```
