@@ -2,7 +2,7 @@
 // system-assigned identity, the least-privilege role it needs, Log Analytics, module imports,
 // runbook and schedules. Subscription scope because a custom role definition lives there.
 //
-//   az deployment sub create -l westeurope -f deploy/main.bicep -p moduleVersion=0.1.0
+//   az deployment sub create -l westeurope -f deploy/main.bicep -p moduleVersion=0.3.0-preview
 //
 // Nothing starts an upgrade by itself: the Start schedule is disabled until an operator enables
 // it, and only VMs tagged UpgradeState=Pending are ever touched.
@@ -22,7 +22,7 @@ param logRetentionDays int = 90
 @description('AzureInPlaceUpgrade module version on the PowerShell Gallery.')
 param moduleVersion string
 
-@description('Version stamp written to the module and runbook content links, System.Version form (up to four numeric parts, e.g. 0.2.0.1). Defaults to moduleVersion; bump it to force Automation to re-import unchanged URIs.')
+@description('Version stamp written to the module and runbook content links, System.Version form (up to four numeric parts, e.g. 0.3.0.1). Defaults to moduleVersion with any pre-release suffix stripped, because Automation rejects one; bump it to force Automation to re-import unchanged URIs.')
 @minLength(0)
 param contentVersion string = ''
 
@@ -87,7 +87,7 @@ module automation 'modules/automation.bicep' = {
     tags: tags
     modulePackageUri: effectiveModuleUri
     runbookContentUri: runbookContentUri
-    contentVersion: empty(contentVersion) ? moduleVersion : contentVersion
+    contentVersion: empty(contentVersion) ? split(moduleVersion, '-')[0] : contentVersion
     subscriptionIdForJobs: subscription().subscriptionId
     ring: ring
     maxParallel: maxParallel

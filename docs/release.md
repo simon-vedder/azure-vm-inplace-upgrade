@@ -6,7 +6,7 @@
 3. Run locally: `Invoke-ScriptAnalyzer -Path ./src -Recurse -Settings ./PSScriptAnalyzerSettings.psd1`
    and `Invoke-Pester ./tests`. Both clean.
 4. Commit on a branch, open the PR, merge to `main`.
-5. Tag: `git tag v0.2.0 && git push origin v0.2.0`. The release workflow refuses a tag that does
+5. Tag: `git tag v0.3.0 && git push origin v0.3.0`. The release workflow refuses a tag that does
    not match the manifest version, runs the analyzer and the tests, publishes to the PowerShell
    Gallery with the `PSGALLERY_API_KEY` secret and attaches `AzureInPlaceUpgrade.zip` plus the
    runbook to the GitHub release.
