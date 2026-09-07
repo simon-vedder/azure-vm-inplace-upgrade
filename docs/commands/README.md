@@ -6,7 +6,7 @@ Unattended in-place Windows Server upgrades for Azure VMs, one by name or a tagg
 
 | | |
 |---|---|
-| Module version | 0.3.0-preview |
+| Module version | 0.3.1-preview |
 | PowerShell | 7.2+ (Core) |
 | Required modules | `Az.Accounts` 2.15.0+, `Az.Compute` 7.1.1+, `Az.Resources` 6.13.0+ |
 | Install | `Install-Module AzureInPlaceUpgrade -AllowPrerelease` |
