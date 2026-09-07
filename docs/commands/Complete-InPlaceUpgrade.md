@@ -25,7 +25,7 @@ Version:             0.1.0
 Created:             2026-09-05
 LastModified:        2026-09-05
 RequiredPermissions: Microsoft.Compute/virtualMachines/read, write, instanceView/read, runCommand/action;
-                     Microsoft.Compute/disks/read, delete; Microsoft.Resources/tags/write
+                     Microsoft.Compute/disks/read, delete
 Prerequisites:       PowerShell 7.2+, Az.Compute, Az.Resources; an established Azure context
 
 ## Parameters

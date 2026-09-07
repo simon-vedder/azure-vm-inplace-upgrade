@@ -22,8 +22,8 @@ function Test-InPlaceUpgradeReadiness {
     Name of the VM when -ResourceGroupName is used instead of -VM.
 
     .PARAMETER Target
-    The target key from the matrix, for example WS2025. Defaults to the VM's UpgradeTarget tag;
-    one of the two must be present.
+    Required. The target key from the matrix, for example WS2025; Get-InPlaceUpgradeTarget lists
+    them. The module never reads it from a tag - the caller states the target.
 
     .PARAMETER MinimumFreeSpaceGB
     Free space required on C: before an upgrade would be started.

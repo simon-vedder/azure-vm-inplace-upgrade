@@ -31,7 +31,7 @@ Prerequisites:       PowerShell 7.2+, Az.Compute, Az.Resources; an established A
 | `-VM` | Object | yes | yes |  | The VM object from Get-AzVM. Accepts pipeline input. |
 | `-ResourceGroupName` | String | yes | no |  | Resource group of the VM when -Name is used instead of -VM. |
 | `-Name` | String | yes | no |  | Name of the VM when -ResourceGroupName is used instead of -VM. |
-| `-Target` | String | yes | no |  | Target key from the matrix, for example WS2025. Defaults to the VM's UpgradeTarget tag. |
+| `-Target` | String | yes | no |  | Required. Target key from the matrix, for example WS2025; Get-InPlaceUpgradeTarget lists them. The module never reads it from a tag - the caller states the target. |
 | `-Engine` | String | no | no | MediaDisk | MediaDisk (default) or FeatureUpdate (experimental, WS2019/WS2022 only); see Start-InPlaceUpgrade. |
 | `-MediaDiskResourceGroupName` | String | no | no |  | Resource group for the media disk. Defaults to the VM's resource group. |
 | `-MediaDiskSkuName` | String | no | no | Standard_LRS | Storage SKU of the media disk. |

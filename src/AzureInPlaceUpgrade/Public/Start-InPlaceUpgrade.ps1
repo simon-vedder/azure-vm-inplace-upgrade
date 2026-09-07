@@ -10,13 +10,16 @@ function Start-InPlaceUpgrade {
     scheduled task running as SYSTEM (ADR 0001). Returns within minutes; the upgrade itself takes
     30 to 120 minutes and several reboots and is finished by Complete-InPlaceUpgrade.
 
-    Tags written: UpgradeState (SnapshotCreated, then UpgradeStarted), UpgradeSnapshot,
-    UpgradeEngine, UpgradeMediaDisk (MediaDisk engine only), UpgradeStartedAt (Unix epoch seconds, UTC). On any failure the state becomes Failed, the media disk
-    is removed unless -KeepMediaDisk is set, and the snapshot stays.
+    Writes nothing to the VM's metadata. Everything Complete-InPlaceUpgrade needs comes back in
+    the result object - Snapshot, Engine, MediaDisk, StartedAt and a ready-to-run ResumeCommand -
+    so the caller decides where that state lives. The runbook keeps it in tags; a script may keep
+    it in a variable. On failure the media disk is removed unless -KeepMediaDisk is set, and the
+    snapshot always stays.
 
-    Idempotent: a VM already in UpgradeStarted or Completed is skipped, a VM in SnapshotCreated or
-    Failed reuses its snapshot, an existing media disk is reused, an attached disk is not attached
-    twice and a running Setup is not started again. The install.wim image is always passed
+    Idempotent, and it asks the guest rather than a tag: a VM already on the target build is
+    skipped, a Setup that is already running is not started again, an existing media disk is
+    reused, an attached disk is not attached twice, and a snapshot from an earlier attempt is
+    reused when the caller passes -ReuseSnapshot. The install.wim image is always passed
     explicitly (/installfrom, /imageindex), detected from the media's WIM metadata, because
     unattended Setup cannot choose between the Core and Desktop Experience images itself.
 
@@ -33,7 +36,8 @@ function Start-InPlaceUpgrade {
     Name of the VM when -ResourceGroupName is used instead of -VM.
 
     .PARAMETER Target
-    Target key from the matrix, for example WS2025. Defaults to the VM's UpgradeTarget tag.
+    Required. Target key from the matrix, for example WS2025; Get-InPlaceUpgradeTarget lists them.
+    The module never reads it from a tag - the caller states the target.
 
     .PARAMETER Engine
     MediaDisk (default): Microsoft's upgrade media as a managed disk, no network needed, every
@@ -106,8 +110,9 @@ function Start-InPlaceUpgrade {
     RequiredPermissions: Microsoft.Compute/virtualMachines/read, write, instanceView/read, runCommand/action;
                          Microsoft.Compute/disks/read, write, delete; Microsoft.Compute/snapshots/read, write;
                          Microsoft.Compute/locations/publishers/artifacttypes/offers/skus/versions/read;
-                         Microsoft.Resources/tags/write; Microsoft.Resources/subscriptions/resourceGroups/read
-                         (a custom role with exactly these actions ships with the Bicep deployment)
+                         Microsoft.Resources/subscriptions/resourceGroups/read
+                         (the Bicep deployment ships a custom role with these actions plus
+                         Microsoft.Resources/tags/write, which the runbook - not this function - needs)
     Prerequisites:       PowerShell 7.2+, Az.Compute, Az.Resources; a healthy Azure Guest Agent in the VM; an established Azure context
 
     .LINK

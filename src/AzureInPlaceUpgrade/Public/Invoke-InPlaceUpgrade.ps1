@@ -19,7 +19,8 @@ function Invoke-InPlaceUpgrade {
     Name of the VM when -ResourceGroupName is used instead of -VM.
 
     .PARAMETER Target
-    Target key from the matrix, for example WS2025. Defaults to the VM's UpgradeTarget tag.
+    Required. Target key from the matrix, for example WS2025; Get-InPlaceUpgradeTarget lists them.
+    The module never reads it from a tag - the caller states the target.
 
     .PARAMETER Engine
     MediaDisk (default) or FeatureUpdate (experimental, WS2019/WS2022 only); see Start-InPlaceUpgrade.
