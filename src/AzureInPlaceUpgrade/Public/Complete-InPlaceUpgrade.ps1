@@ -22,6 +22,25 @@ function Complete-InPlaceUpgrade {
     .PARAMETER Name
     Name of the VM when -ResourceGroupName is used instead of -VM.
 
+    .PARAMETER Snapshot
+    Name of the OS disk snapshot Start-InPlaceUpgrade took before the upgrade. Carried into the
+    telemetry record and into the result so a rollback target is never guessed. Comes from the
+    StartResult; pass it yourself only when you are completing a run you started by other means.
+
+    .PARAMETER MediaDisk
+    Name of the managed disk holding the upgrade media that Start attached. Used to detach and
+    delete it once the upgrade succeeded, unless -KeepMediaDisk is set. Also from the StartResult.
+
+    .PARAMETER Engine
+    Which engine Start used: MediaDisk (Microsoft's upgrade media as a managed disk, the proven
+    path) or FeatureUpdate (Windows Update). It decides how the completion is judged and what
+    cleanup is needed. Defaults to MediaDisk.
+
+    .PARAMETER StartedAt
+    When the upgrade was started, as recorded by Start-InPlaceUpgrade. -TimeoutMinutes is measured
+    from it. Without it the timeout cannot be applied and the command warns and keeps waiting, so
+    pass it for any unattended run.
+
     .PARAMETER TimeoutMinutes
     How old UpgradeStartedAt may be before a VM that has not reached the target build is declared
     Failed.
