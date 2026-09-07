@@ -10,6 +10,11 @@ function Start-InPlaceUpgrade {
     scheduled task running as SYSTEM (ADR 0001). Returns within minutes; the upgrade itself takes
     30 to 120 minutes and several reboots and is finished by Complete-InPlaceUpgrade.
 
+    Start does not wait. Use it when something else has to survive the gap - an Azure Automation
+    job is cancelled after three hours, so the runbook starts in one job and checks in later ones.
+    At a console, where nothing cancels you, Invoke-InPlaceUpgrade does Start, the waiting and
+    Complete in a single call.
+
     Writes nothing to the VM's metadata. Everything Complete-InPlaceUpgrade needs comes back in
     the result object - Snapshot, Engine, MediaDisk, StartedAt and a ready-to-run ResumeCommand -
     so the caller decides where that state lives. The runbook keeps it in tags; a script may keep

@@ -29,13 +29,36 @@ What it creates:
 | Module `AzureInPlaceUpgrade` (PowerShell 7.2 runtime, uses the runtime's global Az bundle) | the engine |
 | Runbook `Invoke-InPlaceUpgradeRunbook` (PowerShell 7.2) | the thin wrapper from `src/runbooks/` |
 | Schedule `inplaceupgrade-check`, every 20 minutes, linked | finishes running upgrades |
-| Schedule `inplaceupgrade-start`, daily, **not linked** unless `startScheduleEnabled=true` | starts approved upgrades |
+| Schedule `inplaceupgrade-start`, daily by default, **not linked** unless `startScheduleEnabled=true` | starts approved upgrades |
 | Custom role *Azure VM In-Place Upgrade Operator* | exactly the actions Start and Complete need |
 | Role assignment on `targetResourceGroupName`, or the subscription when empty | least privilege |
 
 Nothing starts an upgrade by itself. The Start schedule is created but not linked to the runbook
 until you redeploy with `startScheduleEnabled=true`, and even then only VMs tagged
 `UpgradeState=Pending` are touched.
+
+## How fast the fleet moves
+
+Check frees slots, Start fills them, and Start runs on its own schedule — so the ceiling is
+**`maxParallel` VMs per Start run**, not per day and not per hour.
+
+With the defaults, `startScheduleFrequency=Day` and `maxParallel=3`, three VMs begin upgrading each
+day. Forty servers take about two weeks, even though each one finishes in forty minutes. That is
+deliberate: the daily schedule turns `scheduleStartTime` into a maintenance window, so upgrades
+begin at an hour you picked rather than at three in the morning.
+
+For a migration wave, set `startScheduleFrequency=Hour`. Freed slots are then refilled the same
+day and `maxParallel` becomes the real concurrency limit — forty servers at `maxParallel=5` finish
+inside a working day. Put it back to `Day` afterwards.
+
+One constraint on `maxParallel` itself: the runbook starts VMs sequentially, and each start costs
+about three and a half minutes of preflight, snapshot, media disk and launch. A Start run is
+therefore roughly `maxParallel × 3.5` minutes, and Azure Automation cancels a cloud job after three
+hours — so values above roughly 30 will not finish in one run.
+
+Changing the cadence on an existing deployment: the schedule resource is updated in place, but a
+**job schedule that is already linked is immutable** (see KNOWN-ISSUES). If the new cadence does not
+take effect, delete the job schedule and redeploy with `startScheduleEnabled=true`.
 
 Tearing down: `az group delete` removes everything in the resource group, but the custom role
 definition lives at subscription scope and stays behind, and so can an orphaned assignment whose

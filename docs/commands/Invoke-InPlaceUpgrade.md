@@ -2,8 +2,13 @@
 
 > Start an in-place upgrade and wait for it to finish, in one call
 
-Full mode: Start-InPlaceUpgrade, then Complete-InPlaceUpgrade every -PollIntervalSeconds
-until the VM reaches Completed or Failed or -TimeoutMinutes pass. For local runs, Cloud Shell
+Start-InPlaceUpgrade, then Complete-InPlaceUpgrade every -PollIntervalSeconds until the VM
+reaches Completed or Failed or -TimeoutMinutes pass. That is the only difference from calling
+the two yourself: this one blocks for the whole upgrade, 30 to 120 minutes.
+
+Do not use it inside Azure Automation. A cloud job is cancelled after three hours, which is
+less than a slow upgrade needs - that is why the runbook calls Start and Complete separately.
+For a console, Cloud Shell or a Hybrid Runbook Worker, this is the shorter path. For local runs, Cloud Shell
 and Hybrid Runbook Workers. Do not use it in an Azure Automation cloud job: those are cancelled
 after three hours (ADR 0003); schedule Start and Complete separately there.
 

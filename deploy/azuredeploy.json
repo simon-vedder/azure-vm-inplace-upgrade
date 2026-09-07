@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.46.1.21595",
-      "templateHash": "2763307606806298714"
+      "templateHash": "1501407177152064667"
     }
   },
   "parameters": {
@@ -109,7 +109,27 @@
       "type": "bool",
       "defaultValue": false,
       "metadata": {
-        "description": "Enable the daily Start schedule at deployment. Off by default; enable it when the first ring is approved."
+        "description": "Enable the Start schedule at deployment. Off by default; enable it when the first ring is approved."
+      }
+    },
+    "startScheduleFrequency": {
+      "type": "string",
+      "defaultValue": "Day",
+      "allowedValues": [
+        "Day",
+        "Hour"
+      ],
+      "metadata": {
+        "description": "How often Start looks for work. Daily is the default on purpose: it makes scheduleStartTime a maintenance window, so upgrades begin at an hour you chose. Set it to Hour for a migration wave, when you want freed slots refilled the same day."
+      }
+    },
+    "startScheduleInterval": {
+      "type": "int",
+      "defaultValue": 1,
+      "minValue": 1,
+      "maxValue": 24,
+      "metadata": {
+        "description": "Interval for the Start schedule, in units of startScheduleFrequency. Throughput ceiling is maxParallel VMs per Start run: with the daily default and maxParallel 3, three VMs a day begin upgrading."
       }
     },
     "roleName": {
@@ -231,6 +251,12 @@
           "startScheduleEnabled": {
             "value": "[parameters('startScheduleEnabled')]"
           },
+          "startScheduleFrequency": {
+            "value": "[parameters('startScheduleFrequency')]"
+          },
+          "startScheduleInterval": {
+            "value": "[parameters('startScheduleInterval')]"
+          },
           "scheduleTimeZone": {
             "value": "[parameters('scheduleTimeZone')]"
           }
@@ -242,7 +268,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.46.1.21595",
-              "templateHash": "6248787334880666384"
+              "templateHash": "2883373090792219192"
             }
           },
           "parameters": {
@@ -299,6 +325,12 @@
             },
             "startScheduleEnabled": {
               "type": "bool"
+            },
+            "startScheduleFrequency": {
+              "type": "string"
+            },
+            "startScheduleInterval": {
+              "type": "int"
             },
             "scheduleTimeZone": {
               "type": "string"
@@ -598,8 +630,8 @@
               "name": "[format('{0}/{1}', parameters('automationAccountName'), 'inplaceupgrade-start')]",
               "properties": {
                 "description": "Starts upgrades for VMs in UpgradeState=Pending, up to MaxParallel. Linked to the runbook only when enabled at deployment.",
-                "frequency": "Day",
-                "interval": 1,
+                "frequency": "[parameters('startScheduleFrequency')]",
+                "interval": "[parameters('startScheduleInterval')]",
                 "startTime": "[parameters('startScheduleTime')]",
                 "timeZone": "[parameters('scheduleTimeZone')]"
               },
