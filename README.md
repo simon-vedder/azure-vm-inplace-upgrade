@@ -1,4 +1,4 @@
-<p align="center"><img src="docs/images/hero.png" alt="AzureInPlaceUpgrade: unattended, tag-driven in-place upgrades of Windows Server on Azure VMs" width="100%"></p>
+<p align="center"><img src="docs/images/hero.png" alt="AzureInPlaceUpgrade: unattended in-place upgrades of Windows Server on Azure VMs" width="100%"></p>
 
 <p align="center">
   <a href="https://github.com/simon-vedder/azure-vm-inplace-upgrade/actions/workflows/ci.yml"><img src="https://github.com/simon-vedder/azure-vm-inplace-upgrade/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -8,10 +8,10 @@
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT">
 </p>
 
-**Unattended, tag-driven in-place upgrades of Windows Server on Azure VMs.**
+**Unattended in-place upgrades of Windows Server on Azure VMs. One by name, or a tagged fleet from a runbook.**
 
-Tag a VM, and AzureInPlaceUpgrade takes it from Windows Server 2016, 2019 or 2022 to Windows
-Server 2025 without anyone logging on: read-only preflight, OS disk snapshot, Microsoft's upgrade
+Name a VM and a target, and AzureInPlaceUpgrade takes it from Windows Server 2016, 2019 or 2022
+to Windows Server 2025 without anyone logging on: read-only preflight, OS disk snapshot, Microsoft's upgrade
 media attached as a managed disk, Windows Setup started detached from Run Command, a state machine
 that survives reboots and Azure Automation's job limits, in-guest validation, cleanup, and a
 Log Analytics workbook to watch the whole fleet.
@@ -64,18 +64,40 @@ $r = Test-InPlaceUpgradeReadiness -ResourceGroupName rg-apps-prod-weu -Name vm-a
 $r.Decision                                          # Eligible | NotEligible | AlreadyAtTarget
 $r.Checks | Format-Table Name, Result, Detail -AutoSize
 
-# 3. Approve by tag, then start. Snapshot, media disk, Setup. Returns in minutes.
-Start-InPlaceUpgrade -ResourceGroupName rg-apps-prod-weu -Name vm-app-prod-weu-01
+# 3. Start it. Snapshot, media disk, Setup. Returns in minutes. No tags involved.
+$s = Start-InPlaceUpgrade -ResourceGroupName rg-apps-prod-weu -Name vm-app-prod-weu-01 -Target WS2025
 
-# 4. Finish. Run every 20-30 minutes until Completed or Failed.
-Get-InPlaceUpgradeCandidate -State UpgradeStarted | Complete-InPlaceUpgrade | Select-Object VMName, Result, Reason
+# 4. Finish. Run every 20-30 minutes until Completed or Failed. Start printed this line for you.
+Complete-InPlaceUpgrade -ResourceGroupName rg-apps-prod-weu -Name vm-app-prod-weu-01 -Target WS2025 `
+    -Snapshot $s.Snapshot -MediaDisk $s.MediaDisk -StartedAt $s.StartedAt | Select-Object VMName, Result, Reason
 
 # Or, outside Azure Automation, start and wait in one call
-Invoke-InPlaceUpgrade -ResourceGroupName rg-apps-prod-weu -Name vm-app-prod-weu-01 -TimeoutMinutes 300 -Confirm:$false -Verbose
+Invoke-InPlaceUpgrade -ResourceGroupName rg-apps-prod-weu -Name vm-app-prod-weu-01 -Target WS2025 -TimeoutMinutes 300 -Confirm:$false -Verbose
 ```
 
-Tag the VM `UpgradeTarget=WS2025` and `UpgradeState=Pending`; setting `Pending` is the approval.
-What Start leaves behind on success: the VM in `UpgradeStarted`, an incremental OS disk snapshot
+### The module never reads a tag
+
+Every cmdlet takes `-ResourceGroupName`, `-Name` and `-Target`, or a VM object on the pipeline.
+Nothing is inferred from resource metadata, and nothing is written to the VM. `Start` returns what it
+did, and `Complete` takes those values back:
+
+```powershell
+$r = Start-InPlaceUpgrade -ResourceGroupName rg-apps-prod-weu -Name vm-app-prod-weu-01 -Target WS2025
+# Start also prints the finished Complete line; $r.ResumeCommand holds the same string.
+
+Complete-InPlaceUpgrade -ResourceGroupName rg-apps-prod-weu -Name vm-app-prod-weu-01 -Target WS2025 `
+    -Snapshot $r.Snapshot -MediaDisk $r.MediaDisk -StartedAt $r.StartedAt
+```
+
+`Invoke-InPlaceUpgrade` does start and wait in one call and keeps the state in the process, so an
+interactive upgrade needs none of this.
+
+Tags belong to the orchestrator. The runbook selects VMs by `UpgradeTarget`, `UpgradeState` and
+`UpgradeRing`, reads the target off the tag, passes it as `-Target`, and writes the progress back
+with `Update-AzTag` so the next `Check` job can finish the machine. A second `Start` on a running
+upgrade is stopped by the preflight, which sees Setup running in the guest rather than trusting a tag.
+
+What Start returns on success: the VM in `UpgradeStarted`, an incremental OS disk snapshot
 named in `UpgradeSnapshot`, the media disk named in `UpgradeMediaDisk`. What Complete does on a
 final state: sets `Completed` or `Failed`, removes the media disk and the scheduled task, keeps the
 snapshot until you delete it. On a Setup failure the result carries the tail of `setuperr.log` and
@@ -87,7 +109,7 @@ the compat scan blocks.
 
 ```bash
 az deployment sub create -l westeurope -f deploy/main.bicep \
-  -p moduleVersion=0.2.0 targetResourceGroupName=rg-apps-prod-weu ring=Ring0 maxParallel=3
+  -p moduleVersion=0.3.0 targetResourceGroupName=rg-apps-prod-weu ring=Ring0 maxParallel=3
 ```
 
 One subscription-scope deployment creates an Automation Account with a system-assigned identity,

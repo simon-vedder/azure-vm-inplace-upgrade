@@ -13,7 +13,7 @@ function Complete-InPlaceUpgrade {
     state is skipped. Safe to run every few minutes.
 
     .PARAMETER VM
-    The VM object from Get-AzVM or Get-InPlaceUpgradeCandidate -State UpgradeStarted. Accepts
+    The VM object from Get-AzVM. Accepts
     pipeline input.
 
     .PARAMETER ResourceGroupName
@@ -38,7 +38,7 @@ function Complete-InPlaceUpgrade {
 
     .EXAMPLE
     # Evaluate every VM that Start left in UpgradeStarted
-    Get-InPlaceUpgradeCandidate -State UpgradeStarted | Complete-InPlaceUpgrade |
+    Complete-InPlaceUpgrade -ResourceGroupName rg-apps-prod-weu -Name vm-app-prod-weu-01 -Target WS2025 |
         Select-Object VMName, Result, Reason
 
     .EXAMPLE
@@ -75,6 +75,24 @@ function Complete-InPlaceUpgrade {
         [Parameter(Mandatory, ParameterSetName = 'ByName')]
         [string]$Name,
 
+        # What Start left behind. Pass the values, or splat the whole StartResult with -StartResult.
+        [Parameter(Mandatory, ParameterSetName = 'ByName')]
+        [Parameter(Mandatory, ParameterSetName = 'ByObject')]
+        [string]$Target,
+
+        [Parameter()]
+        [string]$Snapshot,
+
+        [Parameter()]
+        [string]$MediaDisk,
+
+        [Parameter()]
+        [ValidateSet('MediaDisk', 'FeatureUpdate')]
+        [string]$Engine = 'MediaDisk',
+
+        [Parameter()]
+        [datetime]$StartedAt,
+
         [Parameter()]
         [ValidateRange(30, 10080)]
         [int]$TimeoutMinutes = 240,
@@ -96,10 +114,9 @@ function Complete-InPlaceUpgrade {
         $vmName = [string]$VM.Name
         $rg = [string]$VM.ResourceGroupName
 
-        $state = Get-VMTagValue -VM $VM -Name $script:Tag.State
-        $targetName = Get-VMTagValue -VM $VM -Name $script:Tag.Target
-        $snapshotName = Get-VMTagValue -VM $VM -Name $script:Tag.Snapshot
-        $engineTag = Get-VMTagValue -VM $VM -Name $script:Tag.Engine
+        $targetName = $Target
+        $snapshotName = $Snapshot
+        $engineTag = $Engine
         $status = $null
         $decision = $null
         $logExcerpt = $null
@@ -125,19 +142,10 @@ function Complete-InPlaceUpgrade {
             }
         }
 
-        if ($state -ine $script:State.UpgradeStarted) {
-            $shown = if ($state) { $state } else { '<none>' }
-            return ConvertTo-CompleteResult 'Skipped' "VM is in state '$shown'; only $($script:State.UpgradeStarted) is evaluated."
-        }
-        if (-not $targetName) { throw "VM '$vmName' is in $($script:State.UpgradeStarted) but has no '$($script:Tag.Target)' tag." }
         $targetObject = Get-InPlaceUpgradeTarget -Name $targetName
 
-        $startedAt = $null
-        $startedAtRaw = Get-VMTagValue -VM $VM -Name $script:Tag.StartedAt
-        if ($startedAtRaw) {
-            $startedAt = ConvertFrom-TagTimestamp -Value $startedAtRaw
-            if ($null -eq $startedAt) { Write-Warning "[$vmName] $($script:Tag.StartedAt)='$startedAtRaw' is not a timestamp; the timeout cannot be applied." }
-        }
+        $startedAt = if ($PSBoundParameters.ContainsKey('StartedAt')) { $StartedAt } else { $null }
+        if (-not $startedAt) { Write-Warning "[$vmName] No -StartedAt was given; the timeout cannot be applied." }
 
         $powerState = Get-VMPowerState -ResourceGroupName $rg -VMName $vmName
         if ($powerState -eq 'running') {
@@ -148,10 +156,7 @@ function Complete-InPlaceUpgrade {
         $decision = Resolve-UpgradeCompletion -Target $targetObject -PowerState $powerState -Status $status -StartedAt $startedAt -TimeoutMinutes $TimeoutMinutes
         Write-Verbose "[$vmName] $($decision.Result): $($decision.Reason)"
 
-        $tagState = $script:Tag.State
-        $tagStartedAt = $script:Tag.StartedAt
-
-        $mediaRef = Get-VMTagValue -VM $VM -Name $script:Tag.MediaDisk
+        $mediaRef = $MediaDisk
         $mediaDiskRg = $rg
         $mediaDiskName = Get-UpgradeMediaDiskName -VMName $vmName -Target $targetObject.Name
         if ($mediaRef -and $mediaRef.Contains('/')) {
@@ -162,7 +167,6 @@ function Complete-InPlaceUpgrade {
         switch ($decision.Result) {
             'Completed' {
                 if ($PSCmdlet.ShouldProcess($vmName, "Mark upgrade Completed ($($decision.Reason)) and remove the media disk")) {
-                    Set-UpgradeTag -ResourceId $VM.Id -Tag @{ $tagState = $script:State.Completed }
                     if (-not (Remove-GuestUpgradeTask -ResourceGroupName $rg -VMName $vmName)) { Write-Verbose "[$vmName] Scheduled task could not be removed; harmless." }
                     if (-not $KeepMediaDisk) {
                         $cleanup = Remove-UpgradeMediaDisk -ResourceGroupName $rg -VMName $vmName -DiskResourceGroupName $mediaDiskRg -DiskName $mediaDiskName
@@ -177,7 +181,6 @@ function Complete-InPlaceUpgrade {
                     $logExcerpt = Get-GuestSetupLogTail -ResourceGroupName $rg -VMName $vmName
                 }
                 if ($PSCmdlet.ShouldProcess($vmName, "Mark upgrade Failed ($($decision.Reason)) and remove the media disk")) {
-                    Set-UpgradeTag -ResourceId $VM.Id -Tag @{ $tagState = $script:State.Failed }
                     if (-not $KeepMediaDisk) {
                         $cleanup = Remove-UpgradeMediaDisk -ResourceGroupName $rg -VMName $vmName -DiskResourceGroupName $mediaDiskRg -DiskName $mediaDiskName
                         $mediaRemoved = $cleanup.Removed
@@ -185,12 +188,7 @@ function Complete-InPlaceUpgrade {
                     }
                 }
             }
-            default {
-                # Without a timestamp the age can never be judged; stamp it now so the next run can.
-                if (-not $startedAtRaw -and $PSCmdlet.ShouldProcess($vmName, "Stamp $tagStartedAt")) {
-                    Set-UpgradeTag -ResourceId $VM.Id -Tag @{ $tagStartedAt = (ConvertTo-TagTimestamp -Value (Get-Date)) }
-                }
-            }
+            default { }
         }
 
         $recordState = switch ($decision.Result) { 'Completed' { $script:State.Completed } 'Failed' { $script:State.Failed } default { $script:State.UpgradeStarted } }

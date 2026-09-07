@@ -90,7 +90,7 @@ Describe 'Module' {
 
     It 'exports exactly the public functions' {
         $exported = @((Get-Module AzureInPlaceUpgrade).ExportedFunctions.Keys | Sort-Object)
-        $exported | Should -Be @('Complete-InPlaceUpgrade', 'Get-InPlaceUpgradeCandidate', 'Get-InPlaceUpgradeTarget', 'Invoke-InPlaceUpgrade', 'Start-InPlaceUpgrade', 'Test-InPlaceUpgradeReadiness')
+        $exported | Should -Be @('Complete-InPlaceUpgrade', 'Get-InPlaceUpgradeTarget', 'Invoke-InPlaceUpgrade', 'Start-InPlaceUpgrade', 'Test-InPlaceUpgradeReadiness')
     }
 
     It 'keeps every guest script free of PowerShell 7 syntax (<_>)' -ForEach @('Facts', 'SetupPath', 'WimImages', 'Launch', 'FeatureUpdateLaunch', 'Status', 'LogTail', 'RemoveTask') {
@@ -206,81 +206,34 @@ Describe 'Get-InPlaceUpgradeTarget' {
     }
 }
 
-Describe 'Tag selection (Test-CandidateTag)' {
-    It 'selects a VM with a target and the expected state' {
-        $vm = New-FakeVM -Tags @{ UpgradeTarget = 'WS2025'; UpgradeState = 'Pending' }
-        & $Private.CandidateTag -VM $vm -State 'Pending' | Should -BeTrue
+Describe 'The module takes parameters, not tags' {
+    It '<_> requires -Target' -ForEach @('Start-InPlaceUpgrade', 'Complete-InPlaceUpgrade', 'Invoke-InPlaceUpgrade', 'Test-InPlaceUpgradeReadiness') {
+        $target = (Get-Command $_).Parameters['Target']
+        $mandatory = @($target.Attributes | Where-Object { $_ -is [System.Management.Automation.ParameterAttribute] } | ForEach-Object { $_.Mandatory })
+        $mandatory | Should -Contain $true -Because "$_ must not infer the target from a tag"
     }
 
-    It 'rejects a VM without an UpgradeTarget tag' {
-        $vm = New-FakeVM -Tags @{ UpgradeState = 'Pending' }
-        & $Private.CandidateTag -VM $vm -State 'Pending' | Should -BeFalse
+    It 'Complete-InPlaceUpgrade takes the resume values Start returns' {
+        $p = (Get-Command Complete-InPlaceUpgrade).Parameters
+        foreach ($name in 'Snapshot', 'MediaDisk', 'StartedAt', 'Engine') { $p.Keys | Should -Contain $name }
     }
 
-    It 'rejects a VM in a different state' {
-        $vm = New-FakeVM -Tags @{ UpgradeTarget = 'WS2025'; UpgradeState = 'Completed' }
-        & $Private.CandidateTag -VM $vm -State 'Pending' | Should -BeFalse
+    It 'Start-InPlaceUpgrade takes a snapshot to reuse instead of reading one' {
+        (Get-Command Start-InPlaceUpgrade).Parameters.Keys | Should -Contain 'ReuseSnapshot'
     }
 
-    It 'requires the state tag to exist when a state filter is given' {
-        $vm = New-FakeVM -Tags @{ UpgradeTarget = 'WS2025' }
-        & $Private.CandidateTag -VM $vm -State 'Pending' | Should -BeFalse
-    }
-
-    It 'accepts any state when the state filter is empty' {
-        $vm = New-FakeVM -Tags @{ UpgradeTarget = 'WS2025' }
-        & $Private.CandidateTag -VM $vm -State '' | Should -BeTrue
-    }
-
-    It 'matches tag names and values case-insensitively and trims whitespace' {
-        $vm = New-FakeVM -Tags @{ upgradetarget = ' ws2025 '; UPGRADESTATE = 'pending' }
-        & $Private.CandidateTag -VM $vm -Target 'WS2025' -State 'Pending' | Should -BeTrue
-    }
-
-    It 'filters by ring' {
-        $vm = New-FakeVM -Tags @{ UpgradeTarget = 'WS2025'; UpgradeState = 'Pending'; UpgradeRing = 'Ring1' }
-        & $Private.CandidateTag -VM $vm -State 'Pending' -Ring 'Ring0' | Should -BeFalse
-        & $Private.CandidateTag -VM $vm -State 'Pending' -Ring 'Ring1' | Should -BeTrue
-    }
-
-    It 'treats a VM without tags as not selected' {
-        $vm = New-FakeVM -Tags @{}
-        & $Private.CandidateTag -VM $vm | Should -BeFalse
-        (& $Private.TagValue -VM ([pscustomobject]@{ Name = 'x' }) -Name 'UpgradeTarget') | Should -BeNullOrEmpty
-    }
-}
-
-Describe 'Get-InPlaceUpgradeCandidate (Get-AzVM mocked)' {
-    BeforeAll {
-        Mock -ModuleName AzureInPlaceUpgrade Get-AzVM {
-            $all = @(
-                (New-FakeVM -Name 'vm-pending' -Tags @{ UpgradeTarget = 'WS2025'; UpgradeState = 'Pending' })
-                (New-FakeVM -Name 'vm-done' -Tags @{ UpgradeTarget = 'WS2025'; UpgradeState = 'Completed' })
-                (New-FakeVM -Name 'vm-untagged' -Tags @{})
-            )
-            if ($Name) { return ($all | Where-Object Name -eq $Name) }
-            return $all
+    It 'no public function reads or writes a tag' {
+        $publicDir = Join-Path $PSScriptRoot '..' 'src' 'AzureInPlaceUpgrade' 'Public'
+        $offenders = Get-ChildItem -Path $publicDir -Filter '*.ps1' -File | Where-Object {
+            (Get-Content -Raw -LiteralPath $_.FullName) -match 'Update-AzTag|Get-VMTagValue|Set-UpgradeTag|\$script:Tag\b'
         }
+        @($offenders).Count | Should -Be 0 -Because 'tags belong to the orchestrator, not the module'
     }
 
-    It 'returns the single matching VM as one object, not nothing (regression: if-statement unrolling)' {
-        $result = @(Get-InPlaceUpgradeCandidate -ResourceGroupName 'rg-test')
-        $result.Count | Should -Be 1
-        $result[0].Name | Should -Be 'vm-pending'
-    }
-
-    It 'returns every tagged VM when the state filter is empty' {
-        @(Get-InPlaceUpgradeCandidate -ResourceGroupName 'rg-test' -State '').Name | Sort-Object | Should -Be @('vm-done', 'vm-pending')
-    }
-
-    It 'returns an untagged VM only with -Name and -IgnoreTags' {
-        @(Get-InPlaceUpgradeCandidate -ResourceGroupName 'rg-test' -Name 'vm-untagged').Count | Should -Be 0
-        @(Get-InPlaceUpgradeCandidate -ResourceGroupName 'rg-test' -Name 'vm-untagged' -IgnoreTags).Name | Should -Be 'vm-untagged'
-    }
-
-    It 'refuses -IgnoreTags without -Name and -Name without a resource group' {
-        { Get-InPlaceUpgradeCandidate -IgnoreTags } | Should -Throw '*only allowed together with -Name*'
-        { Get-InPlaceUpgradeCandidate -Name 'vm-x' } | Should -Throw '*requires -ResourceGroupName*'
+    It 'the runbook is the one that knows the tag names' {
+        $runbook = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot '..' 'src' 'runbooks' 'Invoke-InPlaceUpgradeRunbook.ps1')
+        $runbook | Should -Match 'UpgradeTarget'
+        $runbook | Should -Match 'Update-AzTag'
     }
 }
 
@@ -321,11 +274,6 @@ Describe 'Helpers' {
         (& $Private.FromStamp -Value '09/05/2026 08:25:45').ToString('u') | Should -Be '2026-09-05 08:25:45Z'
         & $Private.FromStamp -Value 'yesterday' | Should -BeNullOrEmpty
         & $Private.FromStamp -Value '' | Should -BeNullOrEmpty
-    }
-
-    It 'knows the engine tag' {
-        $module = Get-Module AzureInPlaceUpgrade
-        (& $module { $script:Tag.Engine }) | Should -Be 'UpgradeEngine'
     }
 
     It 'derives a stable media disk name' {
@@ -447,7 +395,7 @@ Describe 'Telemetry records' {
         $r.State | Should -Be 'UpgradeStarted'
         $r.ImageIndex | Should -Be 4
         $r.DurationMinutes | Should -BeNullOrEmpty
-        $r.ModuleVersion | Should -Be '0.2.0'
+        $r.ModuleVersion | Should -Be (Get-Module AzureInPlaceUpgrade).Version.ToString()
         @($r.PSObject.Properties.Name) | Should -Contain 'LogExcerpt'
     }
 
