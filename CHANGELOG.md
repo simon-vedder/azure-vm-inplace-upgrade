@@ -5,6 +5,27 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.1-preview] - 2026-09-07
+
+Documentation only. No behaviour changed; the shipped help was describing the module 0.3.0
+replaced.
+
+### Fixed
+
+- The comment-based help still described the tag-based module. `Start-InPlaceUpgrade` claimed it
+  writes `UpgradeState`, `UpgradeSnapshot`, `UpgradeEngine`, `UpgradeMediaDisk` and
+  `UpgradeStartedAt`; it writes none of them. `Start`, `Invoke-InPlaceUpgrade` and
+  `Test-InPlaceUpgradeReadiness` said `-Target` "defaults to the VM's UpgradeTarget tag" while the
+  parameter is mandatory. `Complete-InPlaceUpgrade` was synopsised as evaluating "a VM in state
+  UpgradeStarted", a state it can no longer read, and its `-TimeoutMinutes` was described as
+  measured against a tag rather than against `-StartedAt`.
+- `Start` and `Complete` listed `Microsoft.Resources/tags/write` among the permissions they need.
+  They do not; the Bicep role carries it for the runbook, and the note now says so.
+- `Get-InPlaceUpgradeTarget` called a target key a "tag value".
+
+These strings ship inside the module, so `Get-Help` on 0.3.0-preview disagreed with the published
+command reference. That is the whole reason for this release.
+
 ## [0.3.0-preview] - 2026-09-07
 
 Breaking. The module no longer reads or writes Azure tags. Tags are an orchestration concern and
