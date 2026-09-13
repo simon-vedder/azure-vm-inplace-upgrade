@@ -191,6 +191,7 @@ and WS2019 targets, Trusted Launch VMs, imported or retail-activated guests. Rea
 
 ## Documentation
 
+- **[Reference](docs/reference.md)** - the tags, the state machine and what one run records
 - **[Command reference](docs/commands/README.md)** - every command with its parameters, permissions and examples
 - [Verification log](docs/verification.md), the runs behind every ✅
 - [Known issues and sharp edges](KNOWN-ISSUES.md)
